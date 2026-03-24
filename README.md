@@ -9,6 +9,10 @@
 - backend на FastAPI с endpoint `GET /health`;
 - базовый слой SQLite и первые модели;
 - симулятор одного температурного датчика с детерминированным режимом;
+- HTTP ingest телеметрии в backend (`POST /api/ingest/telemetry`);
+- базовые rule-based алерты (`impossible_value`, `low_battery`, `message_flood`);
+- first-seen устройство получает статус `unverified` и alert `unknown_device`;
+- JSON endpoints для устройств/алертов/summary;
 - минимальные автотесты для smoke-проверки.
 
 Еще не реализовано на этом этапе:
@@ -50,6 +54,34 @@ python simulator/main.py --once --seed 42
 ```
 
 Команда печатает один детерминированный JSON payload и завершает работу.
+
+Чтобы сразу отправить telemetry в backend:
+
+```bash
+python simulator/main.py --once --seed 42 --ingest-url http://127.0.0.1:8000/api/ingest/telemetry
+```
+
+Проверить, что данные появились в API:
+
+```bash
+python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/api/devices').read().decode())"
+python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/api/alerts/recent').read().decode())"
+python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/api/stats/summary').read().decode())"
+```
+
+5. Открыть стартовую веб-страницу и проверить ML readiness:
+
+```bash
+python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/api/ml/status').read().decode())"
+```
+
+В браузере:
+
+- `http://127.0.0.1:8000/` — overview dashboard с блоком `ML Integration Readiness`.
+
+Отдельная инструкция по подключению обученной модели:
+
+- `docs/ml-integration.md`
 
 ## Как логировать данные с реального пылесоса (STYTJ02YM)
 
@@ -240,6 +272,9 @@ simulator -> MQTT broker -> FastAPI backend -> SQLite -> dashboard
 10. `docs/team-workflow.md` — командный процесс.
 11. `docs/diploma-outline.md` — структура диплома.
 12. `docs/diploma-notes.md` — заметки для защиты.
+13. `docs/ml-integration.md` — как подключить обученную ML-модель.
+14. `docs/iot-simulation-plan.md` — план симуляции IoT для тестов платформы.
+15. `docs/recommendations.md` — рекомендации по каждому alert_type и варианты размещения в UI/API.
 
 ## Документы по управлению реализацией
 

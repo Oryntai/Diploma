@@ -22,6 +22,38 @@
 
 ## Минимальный набор endpoint-ов
 
+### `POST /api/ingest/telemetry`
+
+Назначение: прием telemetry payload от simulator/adapters.
+
+Пример запроса:
+
+```json
+{
+  "device_id": "temp-001",
+  "device_type": "temperature_sensor",
+  "timestamp": "2026-03-21T10:00:00Z",
+  "temperature": 24.3,
+  "battery": 92,
+  "firmware_version": "1.0.2",
+  "mode": "normal"
+}
+```
+
+Пример ответа:
+
+```json
+{
+  "saved_event_id": 1,
+  "alerts_created": 1,
+  "alert_ids": [1],
+  "device_status": "unverified"
+}
+```
+
+Примечание: при первом появлении `device_id` backend помечает устройство как `unverified`
+и создает alert `unknown_device`.
+
 ### `GET /health`
 
 Назначение: проверка, что backend жив.
@@ -43,11 +75,14 @@
 
 - `device_id`
 - `device_type`
-- `name`
 - `status`
+- `battery`
 - `firmware_version`
 - `last_seen_at`
 - `risk_score`
+- `risk_level`
+- `main_issue`
+- `recommendation`
 
 ### `GET /api/devices/{device_id}`
 
@@ -113,7 +148,8 @@
 
 - ожидаемые устройства предрегистрированы;
 - unknown sender может отображаться в trace events/alerts;
-- unknown sender не должен автоматически попадать в trusted devices;
+- unknown sender не должен автоматически попадать в trusted devices (в текущей реализации
+  устройство получает статус `unverified` и требует ручной верификации);
 - spoofing должен подниматься как алерт.
 
 ## Связь API и страниц
@@ -122,6 +158,20 @@
 - devices -> `GET /api/devices`
 - alerts -> `GET /api/alerts`
 - device detail -> `GET /api/devices/{device_id}`
+
+## Recommendations по алертам
+
+Подробный каталог рекомендаций по каждому alert_type:
+
+- `docs/recommendations.md`
+
+Как это встраивать в API/UI:
+
+- `Risk Distribution` на overview — текст "что значит класс" и "почему активен";
+- `Recent Security Alerts` — быстрый блок `What to do` для конкретного `alert_type`;
+- `Device Detail` — чек-лист действий и статус выполнения;
+- API (следующий шаг) — добавить `recommendation_steps` в `/api/alerts`
+  или отдельный endpoint `GET /api/recommendations?alert_type=...`.
 
 ## Критерий готовности API
 

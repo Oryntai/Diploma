@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
+import urllib.error
+import urllib.request
 
 from devices.temperature import TemperatureSensor
 
@@ -44,12 +47,38 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Emit one payload and exit.",
     )
+    parser.add_argument(
+        "--ingest-url",
+        default=None,
+        help=(
+            "Optional backend ingest endpoint, for example "
+            "http://127.0.0.1:8000/api/ingest/telemetry"
+        ),
+    )
     return parser.parse_args()
 
 
-def emit_payload(device: TemperatureSensor) -> None:
+def publish_to_ingest(ingest_url: str, payload: dict[str, str | int | float]) -> None:
+    request = urllib.request.Request(
+        ingest_url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5):
+            return
+    except urllib.error.URLError as exc:
+        raise RuntimeError(
+            f"Failed to send telemetry to ingest endpoint: {ingest_url}"
+        ) from exc
+
+
+def emit_payload(device: TemperatureSensor, ingest_url: str | None = None) -> None:
     payload = device.next_payload()
     print(json.dumps(payload))
+    if ingest_url:
+        publish_to_ingest(ingest_url, payload)
 
 
 def main() -> int:
@@ -63,11 +92,19 @@ def main() -> int:
     )
 
     if args.once:
-        emit_payload(device)
+        try:
+            emit_payload(device, ingest_url=args.ingest_url)
+        except RuntimeError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
         return 0
 
     while True:
-        emit_payload(device)
+        try:
+            emit_payload(device, ingest_url=args.ingest_url)
+        except RuntimeError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
         time.sleep(args.interval)
 
 

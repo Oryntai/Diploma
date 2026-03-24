@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoT Security Monitoring Platform</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/dashboard.css') }}">
+</head>
+<body>
+<main class="page-shell">
+    <header class="topbar card">
+        <div>
+            <p class="eyebrow">Local diploma prototype</p>
+            <h1>IoT Security Monitoring Platform</h1>
+        </div>
+        <div class="actions">
+            <button type="button">Export Report</button>
+            <button type="button" class="primary">Run Scan</button>
+            <button type="button" id="theme-toggle" class="theme-toggle" aria-pressed="false">
+                Dark mode
+            </button>
+        </div>
+    </header>
+
+    <section class="kpis">
+        <article class="card kpi"><p>Total Devices</p><strong>{{ summary.total_devices }}</strong></article>
+        <article class="card kpi"><p>Active Alerts</p><strong>{{ summary.active_alerts }}</strong></article>
+        <article class="card kpi"><p>High/Critical Risk</p><strong>{{ summary.alerts_by_severity.high + summary.alerts_by_severity.critical }}</strong></article>
+        <article class="card kpi"><p>Avg. Security Score</p><strong>{{ summary.avg_security_score }}</strong></article>
+    </section>
+
+    <section class="layout-grid">
+        <article class="card device-overview">
+            <h2>Device Overview</h2>
+            <table>
+                <thead>
+                <tr>
+                    <th>Device</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Battery</th>
+                    <th>Firmware</th>
+                    <th>Risk</th>
+                    <th>Main Issue</th>
+                    <th>Recommendations</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% if devices %}
+                    {% for device in devices %}
+                    <tr>
+                        <td>{{ device.device_id }}</td>
+                        <td>{{ device.device_type }}</td>
+                        <td><span class="badge {{ 'online' if device.status == 'online' else 'offline' }}">{{ device.status }}</span></td>
+                        <td>{{ device.battery if device.battery is not none else '--' }}{% if device.battery is not none %}%{% endif %}</td>
+                        <td>{{ device.firmware_version if device.firmware_version else '--' }}</td>
+                        <td><span class="badge risk-{{ device.risk_level | lower }}">{{ device.risk_level }}</span></td>
+                        <td>{{ device.main_issue }}</td>
+                        <td class="recommendation-cell">{{ device.recommendation }}</td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="8">No devices ingested yet. Start simulator telemetry to populate this table.</td>
+                    </tr>
+                {% endif %}
+                </tbody>
+            </table>
+        </article>
+
+        <aside class="side-column">
+            <article class="card side-card-compact">
+                <h2>Risk Distribution</h2>
+                <ul class="risk-list">
+                    <li>
+                        <button type="button" class="risk-item-button" data-risk-severity="critical" data-risk-count="{{ summary.alerts_by_severity.critical }}" aria-pressed="false">
+                            <span>Critical</span>
+                            <b>{{ summary.alerts_by_severity.critical }}</b>
+                        </button>
+                    </li>
+                    <li>
+                        <button type="button" class="risk-item-button" data-risk-severity="high" data-risk-count="{{ summary.alerts_by_severity.high }}" aria-pressed="false">
+                            <span>High</span>
+                            <b>{{ summary.alerts_by_severity.high }}</b>
+                        </button>
+                    </li>
+                    <li>
+                        <button type="button" class="risk-item-button" data-risk-severity="medium" data-risk-count="{{ summary.alerts_by_severity.medium }}" aria-pressed="false">
+                            <span>Medium</span>
+                            <b>{{ summary.alerts_by_severity.medium }}</b>
+                        </button>
+                    </li>
+                    <li>
+                        <button type="button" class="risk-item-button" data-risk-severity="low" data-risk-count="{{ summary.alerts_by_severity.low }}" aria-pressed="false">
+                            <span>Low</span>
+                            <b>{{ summary.alerts_by_severity.low }}</b>
+                        </button>
+                    </li>
+                </ul>
+            </article>
+            <article class="card risk-details-card side-card-compact" id="risk-details-card">
+                <h2>Risk Class Details</h2>
+                <p class="risk-selected" id="risk-selected-label">Selected class</p>
+                <p class="risk-description" id="risk-class-description"></p>
+                <p class="risk-meta"><strong>Score range:</strong> <span id="risk-score-range"></span></p>
+                <p class="risk-meta"><strong>Why this class is active:</strong> <span id="risk-why-now"></span></p>
+
+                <h3>Typical reasons</h3>
+                <ul id="risk-typical-causes" class="risk-explainer-list"></ul>
+
+                <h3>Current reasons in your data</h3>
+                <ul id="risk-current-reasons" class="risk-explainer-list"></ul>
+            </article>
+        </aside>
+    </section>
+
+    <section class="card ml-status">
+        <h2>ML Integration Readiness</h2>
+        <ul>
+            <li><strong>Configured path:</strong> <code>{{ ml_status.model_path }}</code></li>
+            <li><strong>Model format:</strong> {{ ml_status.model_format }}</li>
+            <li><strong>File exists:</strong> {{ ml_status.model_exists }}</li>
+            <li><strong>Loaded:</strong> {{ ml_status.model_loaded }}</li>
+            <li><strong>Ready for inference:</strong> {{ ml_status.ready_for_inference }}</li>
+            <li><strong>Env override:</strong> <code>{{ model_env_key }}</code></li>
+        </ul>
+        <p class="hint">{{ ml_status.detail }}</p>
+    </section>
+</main>
+<script id="risk-explanations-data" type="application/json">{{ risk_explanations | tojson }}</script>
+<script>
+(() => {
+    const storageKey = "dashboard-theme";
+    const root = document.documentElement;
+    const themeToggle = document.getElementById("theme-toggle");
+    const preferredDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const savedTheme = localStorage.getItem(storageKey);
+    const initialTheme = savedTheme || (preferredDark ? "dark" : "light");
+
+    const riskDataNode = document.getElementById("risk-explanations-data");
+    let riskExplanations = {};
+    if (riskDataNode && riskDataNode.textContent) {
+        try {
+            riskExplanations = JSON.parse(riskDataNode.textContent);
+        } catch (error) {
+            riskExplanations = {};
+        }
+    }
+
+    const riskButtons = Array.from(document.querySelectorAll(".risk-item-button"));
+    const riskDetailsCard = document.getElementById("risk-details-card");
+    const selectedLabel = document.getElementById("risk-selected-label");
+    const classDescription = document.getElementById("risk-class-description");
+    const scoreRange = document.getElementById("risk-score-range");
+    const whyNow = document.getElementById("risk-why-now");
+    const typicalCauses = document.getElementById("risk-typical-causes");
+    const currentReasons = document.getElementById("risk-current-reasons");
+    let activeSeverity = null;
+
+    const setButtonsState = (severity) => {
+        riskButtons.forEach((button) => {
+            const isActive = button.dataset.riskSeverity === severity;
+            button.classList.toggle("active", isActive);
+            button.setAttribute("aria-pressed", String(isActive));
+        });
+    };
+
+    const collapseRiskDetails = () => {
+        activeSeverity = null;
+        setButtonsState(null);
+        if (riskDetailsCard) {
+            riskDetailsCard.hidden = true;
+        }
+    };
+
+    const renderList = (targetElement, items, fallbackText) => {
+        if (!targetElement) {
+            return;
+        }
+        targetElement.innerHTML = "";
+        const source = items.length > 0 ? items : [fallbackText];
+        source.forEach((item) => {
+            const li = document.createElement("li");
+            li.textContent = item;
+            targetElement.appendChild(li);
+        });
+    };
+
+    const renderRiskDetails = (severity) => {
+        const details = riskExplanations[severity];
+        if (!details) {
+            return;
+        }
+
+        if (selectedLabel) {
+            selectedLabel.textContent = `${details.label} (${details.current_count})`;
+            selectedLabel.className = `risk-selected risk-${severity}`;
+        }
+        if (classDescription) {
+            classDescription.textContent = details.class_description;
+        }
+        if (scoreRange) {
+            scoreRange.textContent = details.score_range;
+        }
+        if (whyNow) {
+            whyNow.textContent = details.why_now;
+        }
+
+        renderList(
+            typicalCauses,
+            details.typical_causes || [],
+            "No baseline reasons configured for this class."
+        );
+        renderList(
+            currentReasons,
+            details.current_reasons || [],
+            "No active alerts in this severity right now."
+        );
+        activeSeverity = severity;
+        setButtonsState(severity);
+        if (riskDetailsCard) {
+            riskDetailsCard.hidden = false;
+        }
+    };
+
+    const applyTheme = (theme) => {
+        root.setAttribute("data-theme", theme);
+        if (!themeToggle) {
+            return;
+        }
+
+        const isDark = theme === "dark";
+        themeToggle.setAttribute("aria-pressed", String(isDark));
+        themeToggle.textContent = isDark ? "Light mode" : "Dark mode";
+    };
+
+    applyTheme(initialTheme);
+
+    if (riskButtons.length > 0) {
+        riskButtons.forEach((button) => {
+            button.addEventListener("click", () => {
+                const severity = button.dataset.riskSeverity;
+                if (severity) {
+                    if (activeSeverity === severity) {
+                        collapseRiskDetails();
+                        return;
+                    }
+                    renderRiskDetails(severity);
+                }
+            });
+        });
+
+        const preferredRiskButton = riskButtons.find((button) => {
+            return Number(button.dataset.riskCount || "0") > 0;
+        });
+        const initialSeverity = preferredRiskButton?.dataset.riskSeverity || "critical";
+        renderRiskDetails(initialSeverity);
+    }
+
+    if (themeToggle) {
+        themeToggle.addEventListener("click", () => {
+            const nextTheme = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+            applyTheme(nextTheme);
+            localStorage.setItem(storageKey, nextTheme);
+        });
+    }
+})();
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import sys
 from pathlib import Path
 
@@ -8,13 +8,11 @@ from fastapi.testclient import TestClient
 
 
 def load_app():
-    module_path = Path(__file__).resolve().parents[2] / "backend" / "app" / "main.py"
-    spec = importlib.util.spec_from_file_location("backend_app_main", module_path)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
+    backend_dir = Path(__file__).resolve().parents[2] / "backend"
+    backend_dir_str = str(backend_dir)
+    if backend_dir_str not in sys.path:
+        sys.path.insert(0, backend_dir_str)
+    module = importlib.import_module("app.main")
     return module.app
 
 
