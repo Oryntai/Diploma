@@ -48,7 +48,7 @@ class Settings:
 
 settings = Settings(
     ml_model_path=_resolve_model_path(
-        os.getenv("ML_MODEL_PATH", "models/security_model.joblib"),
+        os.getenv("ML_MODEL_PATH", "models/best_autoencoder_ciciot23.pt"),
     ),
     flood_window_seconds=_env_int("RULE_FLOOD_WINDOW_SECONDS", 60),
     flood_threshold=_env_int("RULE_FLOOD_THRESHOLD", 20),

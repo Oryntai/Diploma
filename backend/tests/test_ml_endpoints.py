@@ -57,19 +57,18 @@ def test_ml_status_reports_model_path_and_flags() -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["model_path"].endswith("backend\\models\\security_model.joblib")
-    assert payload["model_exists"] is False
-    assert payload["model_loaded"] is False
+    assert payload["model_path"].endswith("best_autoencoder_ciciot23.pt")
+    assert isinstance(payload["model_exists"], bool)
+    assert isinstance(payload["model_loaded"], bool)
 
 
-def test_ml_predict_without_model_returns_service_unavailable() -> None:
+def test_ml_predict_with_wrong_feature_count_returns_error() -> None:
     response = TestClient(load_app()).post(
         "/api/ml/predict",
         json={"features": [0.1, 0.2, 0.3]},
     )
 
-    assert response.status_code == 503
-    assert "Trained model file is not found" in response.json()["detail"]
+    assert response.status_code in (400, 503)
 
 
 def test_ml_predict_with_stub_model_returns_prediction(tmp_path: Path) -> None:

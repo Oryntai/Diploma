@@ -7,7 +7,7 @@ import time
 import urllib.error
 import urllib.request
 
-from devices.temperature import TemperatureSensor
+from devices import DEVICE_CLASSES
 
 
 def parse_args() -> argparse.Namespace:
@@ -15,9 +15,15 @@ def parse_args() -> argparse.Namespace:
         description="Emit deterministic telemetry for one temperature sensor.",
     )
     parser.add_argument(
+        "--device-type",
+        choices=list(DEVICE_CLASSES.keys()),
+        default="temperature_sensor",
+        help="Type of IoT device to simulate.",
+    )
+    parser.add_argument(
         "--device-id",
-        default="temp-001",
-        help="Device identifier included in telemetry payloads.",
+        default=None,
+        help="Device identifier (auto-generated from device type if omitted).",
     )
     parser.add_argument(
         "--mode",
@@ -74,7 +80,7 @@ def publish_to_ingest(ingest_url: str, payload: dict[str, str | int | float]) ->
         ) from exc
 
 
-def emit_payload(device: TemperatureSensor, ingest_url: str | None = None) -> None:
+def emit_payload(device: object, ingest_url: str | None = None) -> None:
     payload = device.next_payload()
     print(json.dumps(payload))
     if ingest_url:
@@ -83,8 +89,10 @@ def emit_payload(device: TemperatureSensor, ingest_url: str | None = None) -> No
 
 def main() -> int:
     args = parse_args()
-    device = TemperatureSensor(
-        device_id=args.device_id,
+    device_id = args.device_id or f"{args.device_type.replace('_', '-')}-001"
+    device_cls = DEVICE_CLASSES[args.device_type]
+    device = device_cls(
+        device_id=device_id,
         mode=args.mode,
         seed=args.seed,
         interval_seconds=args.interval,

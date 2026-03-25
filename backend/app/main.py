@@ -20,6 +20,7 @@ from .models.device import Device
 from .models.telemetry_event import TelemetryEvent
 from .schemas.ml import MLPredictRequest, MLPredictResponse, MLStatusResponse
 from .services.ml_runtime import MLRuntime
+from .services.traffic_features import TrafficFeatureGenerator
 
 
 class TelemetryIngestRequest(BaseModel):
@@ -97,6 +98,24 @@ templates = Jinja2Templates(directory=str(app_dir / "templates"))
 app.mount("/static", StaticFiles(directory=str(app_dir / "static")), name="static")
 
 ml_runtime = MLRuntime(model_path=settings.ml_model_path)
+traffic_generator = TrafficFeatureGenerator(seed=42)
+
+
+def _ml_severity(risk_level: str) -> str:
+    return {"Low": "low", "Medium": "medium", "High": "high", "Critical": "critical"}.get(
+        risk_level, "medium"
+    )
+
+
+def _ml_risk_score(error: float, threshold: float) -> int:
+    ratio = error / threshold if threshold > 0 else 0
+    if ratio < 1.0:
+        return 10
+    if ratio < 2.0:
+        return 40
+    if ratio < 4.0:
+        return 65
+    return 85
 
 
 def _default_topic(payload: TelemetryIngestRequest) -> str:
@@ -190,6 +209,8 @@ def _recommendation_for_device(
         "impossible_value": "Check sensor integrity and isolate device until values normalize.",
         "low_battery": "Recharge or replace battery and monitor stability.",
         "message_flood": "Throttle telemetry rate and inspect firmware or adapter loop.",
+        "firmware_mismatch": "Verify firmware integrity and compare hash against known good version.",
+        "ml_anomaly": "ML model detected anomalous traffic. Investigate network behavior and isolate if confirmed.",
     }
     if alert_type in recommendation_by_alert:
         return recommendation_by_alert[alert_type]
@@ -267,6 +288,7 @@ def _to_device_summary(
 def _evaluate_telemetry_rules(
     db: Session,
     payload: TelemetryIngestRequest,
+    existing_device: Device | None = None,
 ) -> list[Alert]:
     alerts: list[Alert] = []
 
@@ -340,6 +362,28 @@ def _evaluate_telemetry_rules(
             )
         )
 
+    if (
+        payload.firmware_version is not None
+        and existing_device is not None
+        and existing_device.firmware_version is not None
+        and payload.firmware_version != existing_device.firmware_version
+    ):
+        alerts.append(
+            Alert(
+                device_id=payload.device_id,
+                alert_type="firmware_mismatch",
+                severity="high",
+                risk_score=60,
+                reason=(
+                    f"Firmware version changed unexpectedly: "
+                    f"'{existing_device.firmware_version}' -> "
+                    f"'{payload.firmware_version}'. "
+                    f"Possible unauthorized update or device spoofing."
+                ),
+                source="rule_engine",
+            )
+        )
+
     return alerts
 
 
@@ -395,7 +439,38 @@ def _ingest_telemetry(
     db.add(telemetry_event)
     db.flush()
 
-    generated_alerts.extend(_evaluate_telemetry_rules(db, payload))
+    generated_alerts.extend(
+        _evaluate_telemetry_rules(db, payload, existing_device=existing_device)
+    )
+
+    if ml_runtime.get_status().get("ready_for_inference"):
+        try:
+            features = traffic_generator.generate(
+                device_type=payload.device_type,
+                mode=payload.mode or "normal",
+            )
+            result = ml_runtime.predict_with_context(features)
+            if result.get("label") == "anomaly":
+                generated_alerts.append(
+                    Alert(
+                        device_id=payload.device_id,
+                        alert_type="ml_anomaly",
+                        severity=_ml_severity(result.get("risk_level", "Medium")),
+                        risk_score=_ml_risk_score(
+                            result["prediction"], result.get("threshold", 0.048)
+                        ),
+                        reason=(
+                            f"ML model detected anomalous network behavior. "
+                            f"Reconstruction error: {result['prediction']:.6f} "
+                            f"(threshold: {result.get('threshold', 0.048):.6f}). "
+                            f"Risk level: {result.get('risk_level', 'Unknown')}."
+                        ),
+                        source="ml_model",
+                    )
+                )
+        except Exception:
+            pass
+
     for alert in generated_alerts:
         db.add(alert)
 
