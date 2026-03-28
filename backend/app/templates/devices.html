@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Devices — IoT Security Monitoring</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/dashboard.css') }}">
+</head>
+<body>
+<main class="page-shell">
+    <header class="topbar card">
+        <div>
+            <p class="eyebrow">Local diploma prototype</p>
+            <h1>IoT Security Monitoring Platform</h1>
+        </div>
+        <div class="actions">
+            <button type="button" id="theme-toggle" class="theme-toggle" aria-pressed="false">Dark mode</button>
+        </div>
+    </header>
+
+    <nav class="nav-bar card">
+        <a href="/">Overview</a>
+        <a href="/dashboard/devices" class="active">Devices</a>
+        <a href="/dashboard/alerts">Alerts</a>
+    </nav>
+
+    <section class="kpis">
+        <article class="card kpi"><p>Total Devices</p><strong>{{ summary.total_devices }}</strong></article>
+        <article class="card kpi"><p>Online</p><strong>{{ summary.online_devices }}</strong></article>
+        <article class="card kpi"><p>Active Alerts</p><strong>{{ summary.active_alerts }}</strong></article>
+        <article class="card kpi"><p>Avg. Security Score</p><strong>{{ summary.avg_security_score }}</strong></article>
+    </section>
+
+    <section class="card">
+        <h2>All Devices</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Device</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Battery</th>
+                <th>Firmware</th>
+                <th>Risk</th>
+                <th>Main Issue</th>
+                <th>Recommendation</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% if devices %}
+                {% for device in devices %}
+                <tr>
+                    <td><a href="/dashboard/devices/{{ device.device_id }}" class="device-link">{{ device.device_id }}</a></td>
+                    <td>{{ device.device_type }}</td>
+                    <td><span class="badge {{ 'online' if device.status == 'online' else 'offline' }}">{{ device.status }}</span></td>
+                    <td>{{ device.battery if device.battery is not none else '--' }}{% if device.battery is not none %}%{% endif %}</td>
+                    <td>{{ device.firmware_version if device.firmware_version else '--' }}</td>
+                    <td><span class="badge risk-{{ device.risk_level | lower }}">{{ device.risk_level }}</span></td>
+                    <td>{{ device.main_issue }}</td>
+                    <td class="recommendation-cell">{{ device.recommendation }}</td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr><td colspan="8">No devices registered yet.</td></tr>
+            {% endif %}
+            </tbody>
+        </table>
+    </section>
+</main>
+<script>
+(() => {
+    const storageKey = "dashboard-theme";
+    const root = document.documentElement;
+    const themeToggle = document.getElementById("theme-toggle");
+    const preferredDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const savedTheme = localStorage.getItem(storageKey);
+    const initialTheme = savedTheme || (preferredDark ? "dark" : "light");
+
+    const applyTheme = (theme) => {
+        root.setAttribute("data-theme", theme);
+        if (!themeToggle) return;
+        const isDark = theme === "dark";
+        themeToggle.setAttribute("aria-pressed", String(isDark));
+        themeToggle.textContent = isDark ? "Light mode" : "Dark mode";
+    };
+    applyTheme(initialTheme);
+
+    if (themeToggle) {
+        themeToggle.addEventListener("click", () => {
+            const nextTheme = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+            applyTheme(nextTheme);
+            localStorage.setItem(storageKey, nextTheme);
+        });
+    }
+})();
+</script>
+</body>
+</html>

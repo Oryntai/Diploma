@@ -61,7 +61,36 @@ def parse_args() -> argparse.Namespace:
             "http://127.0.0.1:8000/api/ingest/telemetry"
         ),
     )
+    parser.add_argument(
+        "--mqtt-host",
+        default=None,
+        help="MQTT broker host (e.g. 127.0.0.1). Enables MQTT publish.",
+    )
+    parser.add_argument(
+        "--mqtt-port",
+        type=int,
+        default=1883,
+        help="MQTT broker port (default 1883).",
+    )
     return parser.parse_args()
+
+
+def publish_to_mqtt(
+    host: str, port: int, payload: dict[str, str | int | float]
+) -> None:
+    try:
+        import paho.mqtt.client as mqtt
+    except ImportError:
+        raise RuntimeError("paho-mqtt is required for MQTT publish: pip install paho-mqtt")
+
+    device_type = payload.get("device_type", "unknown")
+    device_id = payload.get("device_id", "unknown")
+    topic = f"iot/devices/{device_type}/{device_id}/telemetry"
+
+    client = mqtt.Client()
+    client.connect(host, port, keepalive=10)
+    client.publish(topic, json.dumps(payload), qos=1)
+    client.disconnect()
 
 
 def publish_to_ingest(ingest_url: str, payload: dict[str, str | int | float]) -> None:
@@ -80,11 +109,18 @@ def publish_to_ingest(ingest_url: str, payload: dict[str, str | int | float]) ->
         ) from exc
 
 
-def emit_payload(device: object, ingest_url: str | None = None) -> None:
+def emit_payload(
+    device: object,
+    ingest_url: str | None = None,
+    mqtt_host: str | None = None,
+    mqtt_port: int = 1883,
+) -> None:
     payload = device.next_payload()
     print(json.dumps(payload))
     if ingest_url:
         publish_to_ingest(ingest_url, payload)
+    if mqtt_host:
+        publish_to_mqtt(mqtt_host, mqtt_port, payload)
 
 
 def main() -> int:
@@ -99,9 +135,15 @@ def main() -> int:
         firmware_version=args.firmware_version,
     )
 
+    emit_kwargs = {
+        "ingest_url": args.ingest_url,
+        "mqtt_host": args.mqtt_host,
+        "mqtt_port": args.mqtt_port,
+    }
+
     if args.once:
         try:
-            emit_payload(device, ingest_url=args.ingest_url)
+            emit_payload(device, **emit_kwargs)
         except RuntimeError as exc:
             print(str(exc), file=sys.stderr)
             return 1
@@ -109,7 +151,7 @@ def main() -> int:
 
     while True:
         try:
-            emit_payload(device, ingest_url=args.ingest_url)
+            emit_payload(device, **emit_kwargs)
         except RuntimeError as exc:
             print(str(exc), file=sys.stderr)
             return 1

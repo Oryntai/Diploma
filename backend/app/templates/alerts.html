@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alerts — IoT Security Monitoring</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/dashboard.css') }}">
+</head>
+<body>
+<main class="page-shell">
+    <header class="topbar card">
+        <div>
+            <p class="eyebrow">Local diploma prototype</p>
+            <h1>IoT Security Monitoring Platform</h1>
+        </div>
+        <div class="actions">
+            <button type="button" id="theme-toggle" class="theme-toggle" aria-pressed="false">Dark mode</button>
+        </div>
+    </header>
+
+    <nav class="nav-bar card">
+        <a href="/">Overview</a>
+        <a href="/dashboard/devices">Devices</a>
+        <a href="/dashboard/alerts" class="active">Alerts</a>
+    </nav>
+
+    <section class="kpis">
+        <article class="card kpi"><p>Total Alerts</p><strong>{{ alerts | length }}</strong></article>
+        <article class="card kpi"><p>Critical</p><strong>{{ alerts | selectattr('severity', 'equalto', 'critical') | list | length }}</strong></article>
+        <article class="card kpi"><p>High</p><strong>{{ alerts | selectattr('severity', 'equalto', 'high') | list | length }}</strong></article>
+        <article class="card kpi"><p>Medium</p><strong>{{ alerts | selectattr('severity', 'equalto', 'medium') | list | length }}</strong></article>
+    </section>
+
+    <section class="card">
+        <h2>All Alerts</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>Device</th>
+                <th>Type</th>
+                <th>Severity</th>
+                <th>Risk</th>
+                <th>Source</th>
+                <th>Reason</th>
+                <th>Time</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% if alerts %}
+                {% for alert in alerts %}
+                <tr>
+                    <td>{{ alert.id }}</td>
+                    <td>
+                        {% if alert.device_id %}
+                            <a href="/dashboard/devices/{{ alert.device_id }}" class="device-link">{{ alert.device_id }}</a>
+                        {% else %}
+                            --
+                        {% endif %}
+                    </td>
+                    <td><span class="badge alert-type">{{ alert.alert_type }}</span></td>
+                    <td><span class="badge risk-{{ alert.severity }}">{{ alert.severity }}</span></td>
+                    <td>{{ alert.risk_score }}</td>
+                    <td><span class="badge source-{{ alert.source }}">{{ alert.source }}</span></td>
+                    <td>{{ alert.reason }}</td>
+                    <td class="nowrap">{{ alert.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr><td colspan="8">No alerts recorded yet.</td></tr>
+            {% endif %}
+            </tbody>
+        </table>
+    </section>
+</main>
+<script>
+(() => {
+    const storageKey = "dashboard-theme";
+    const root = document.documentElement;
+    const themeToggle = document.getElementById("theme-toggle");
+    const preferredDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const savedTheme = localStorage.getItem(storageKey);
+    const initialTheme = savedTheme || (preferredDark ? "dark" : "light");
+
+    const applyTheme = (theme) => {
+        root.setAttribute("data-theme", theme);
+        if (!themeToggle) return;
+        const isDark = theme === "dark";
+        themeToggle.setAttribute("aria-pressed", String(isDark));
+        themeToggle.textContent = isDark ? "Light mode" : "Dark mode";
+    };
+    applyTheme(initialTheme);
+
+    if (themeToggle) {
+        themeToggle.addEventListener("click", () => {
+            const nextTheme = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+            applyTheme(nextTheme);
+            localStorage.setItem(storageKey, nextTheme);
+        });
+    }
+})();
+</script>
+</body>
+</html>

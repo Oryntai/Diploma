@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ detail.device.device_id }} — IoT Security Monitoring</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/dashboard.css') }}">
+</head>
+<body>
+<main class="page-shell">
+    <header class="topbar card">
+        <div>
+            <p class="eyebrow">Local diploma prototype</p>
+            <h1>IoT Security Monitoring Platform</h1>
+        </div>
+        <div class="actions">
+            <button type="button" id="theme-toggle" class="theme-toggle" aria-pressed="false">Dark mode</button>
+        </div>
+    </header>
+
+    <nav class="nav-bar card">
+        <a href="/">Overview</a>
+        <a href="/dashboard/devices">Devices</a>
+        <a href="/dashboard/alerts">Alerts</a>
+    </nav>
+
+    <section class="kpis">
+        <article class="card kpi">
+            <p>Device</p>
+            <strong style="font-size:1.1rem">{{ detail.device.device_id }}</strong>
+        </article>
+        <article class="card kpi">
+            <p>Status</p>
+            <strong><span class="badge {{ 'online' if detail.device.status == 'online' else 'offline' }}">{{ detail.device.status }}</span></strong>
+        </article>
+        <article class="card kpi">
+            <p>Risk</p>
+            <strong><span class="badge risk-{{ detail.device.risk_level | lower }}">{{ detail.device.risk_level }} ({{ detail.device.risk_score }})</span></strong>
+        </article>
+        <article class="card kpi">
+            <p>Battery</p>
+            <strong>{{ detail.device.battery if detail.device.battery is not none else '--' }}{% if detail.device.battery is not none %}%{% endif %}</strong>
+        </article>
+    </section>
+
+    <section class="layout-grid">
+        <article class="card">
+            <h2>Device Info</h2>
+            <table class="detail-table">
+                <tr><th>Type</th><td>{{ detail.device.device_type }}</td></tr>
+                <tr><th>Firmware</th><td>{{ detail.device.firmware_version or '--' }}</td></tr>
+                <tr><th>Last Seen</th><td>{{ detail.device.last_seen_at.strftime('%Y-%m-%d %H:%M:%S') if detail.device.last_seen_at else '--' }}</td></tr>
+                <tr><th>Main Issue</th><td>{{ detail.device.main_issue }}</td></tr>
+                <tr><th>Recommendation</th><td class="recommendation-cell">{{ detail.device.recommendation }}</td></tr>
+            </table>
+        </article>
+
+        <aside class="side-column">
+            <article class="card side-card-compact">
+                <h2>Quick Stats</h2>
+                <ul class="detail-stats">
+                    <li><strong>Telemetry events:</strong> {{ detail.recent_telemetry | length }}</li>
+                    <li><strong>Alerts:</strong> {{ detail.recent_alerts | length }}</li>
+                    <li><strong>Risk score:</strong> {{ detail.device.risk_score }}</li>
+                </ul>
+            </article>
+        </aside>
+    </section>
+
+    <section class="card">
+        <h2>Recent Alerts</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>Type</th>
+                <th>Severity</th>
+                <th>Risk</th>
+                <th>Source</th>
+                <th>Reason</th>
+                <th>Time</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% if detail.recent_alerts %}
+                {% for alert in detail.recent_alerts %}
+                <tr>
+                    <td>{{ alert.id }}</td>
+                    <td><span class="badge alert-type">{{ alert.alert_type }}</span></td>
+                    <td><span class="badge risk-{{ alert.severity }}">{{ alert.severity }}</span></td>
+                    <td>{{ alert.risk_score }}</td>
+                    <td><span class="badge source-{{ alert.source }}">{{ alert.source }}</span></td>
+                    <td>{{ alert.reason }}</td>
+                    <td class="nowrap">{{ alert.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr><td colspan="7">No alerts for this device.</td></tr>
+            {% endif %}
+            </tbody>
+        </table>
+    </section>
+
+    <section class="card">
+        <h2>Recent Telemetry</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>Topic</th>
+                <th>Payload</th>
+                <th>Received</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% if detail.recent_telemetry %}
+                {% for event in detail.recent_telemetry %}
+                <tr>
+                    <td>{{ event.id }}</td>
+                    <td class="nowrap">{{ event.topic }}</td>
+                    <td><code class="payload-code">{{ event.payload | tojson }}</code></td>
+                    <td class="nowrap">{{ event.received_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr><td colspan="4">No telemetry events for this device.</td></tr>
+            {% endif %}
+            </tbody>
+        </table>
+    </section>
+</main>
+<script>
+(() => {
+    const storageKey = "dashboard-theme";
+    const root = document.documentElement;
+    const themeToggle = document.getElementById("theme-toggle");
+    const preferredDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const savedTheme = localStorage.getItem(storageKey);
+    const initialTheme = savedTheme || (preferredDark ? "dark" : "light");
+
+    const applyTheme = (theme) => {
+        root.setAttribute("data-theme", theme);
+        if (!themeToggle) return;
+        const isDark = theme === "dark";
+        themeToggle.setAttribute("aria-pressed", String(isDark));
+        themeToggle.textContent = isDark ? "Light mode" : "Dark mode";
+    };
+    applyTheme(initialTheme);
+
+    if (themeToggle) {
+        themeToggle.addEventListener("click", () => {
+            const nextTheme = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+            applyTheme(nextTheme);
+            localStorage.setItem(storageKey, nextTheme);
+        });
+    }
+})();
+</script>
+</body>
+</html>

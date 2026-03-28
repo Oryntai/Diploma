@@ -356,6 +356,89 @@ code {
     margin-bottom: 0;
 }
 
+.nav-bar {
+    display: flex;
+    gap: 6px;
+    padding: 10px 18px;
+}
+
+.nav-bar a {
+    padding: 8px 16px;
+    border-radius: 8px;
+    text-decoration: none;
+    color: var(--ink);
+    font-weight: 600;
+    font-size: 0.94rem;
+    transition: background 0.15s ease;
+}
+
+.nav-bar a:hover {
+    background: var(--accent-soft);
+}
+
+.nav-bar a.active {
+    background: var(--accent);
+    color: #fff;
+}
+
+.device-link {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.device-link:hover {
+    text-decoration: underline;
+}
+
+.nowrap {
+    white-space: nowrap;
+}
+
+.badge.alert-type {
+    background: var(--code-bg);
+    color: var(--ink);
+    font-weight: 600;
+}
+
+.badge.source-rule_engine {
+    background: #e8f0fe;
+    color: #1a56db;
+}
+
+.badge.source-ml_model {
+    background: #fce7f3;
+    color: #9d174d;
+}
+
+.detail-table {
+    table-layout: auto;
+}
+
+.detail-table th {
+    width: 160px;
+    color: var(--muted);
+    font-weight: 600;
+}
+
+.detail-stats {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.detail-stats li {
+    margin-bottom: 8px;
+}
+
+.payload-code {
+    font-size: 0.82rem;
+    max-width: 500px;
+    display: inline-block;
+    overflow-wrap: break-word;
+    word-break: break-all;
+}
+
 @media (max-width: 980px) {
     .kpis,
     .layout-grid {

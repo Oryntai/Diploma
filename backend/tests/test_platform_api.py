@@ -126,3 +126,147 @@ def test_flood_rule_generates_message_flood_alert(tmp_path: Path) -> None:
     alerts_payload = client.get("/api/alerts/recent").json()
     alert_types = {item["alert_type"] for item in alerts_payload}
     assert "message_flood" in alert_types
+
+
+def test_firmware_mismatch_alert(tmp_path: Path) -> None:
+    app = load_app(sqlite_url(tmp_path / "platform_fw.db"))
+    client = TestClient(app)
+
+    client.post(
+        "/api/ingest/telemetry",
+        json={
+            "device_id": "lock-fw-001",
+            "device_type": "smart_door_lock",
+            "timestamp": "2026-03-21T10:00:00Z",
+            "battery": 90,
+            "firmware_version": "1.0.2",
+            "mode": "normal",
+        },
+    )
+
+    response = client.post(
+        "/api/ingest/telemetry",
+        json={
+            "device_id": "lock-fw-001",
+            "device_type": "smart_door_lock",
+            "timestamp": "2026-03-21T10:01:00Z",
+            "battery": 89,
+            "firmware_version": "2.0.0-hacked",
+            "mode": "normal",
+        },
+    )
+    assert response.status_code == 200
+
+    alerts_payload = client.get("/api/alerts/recent").json()
+    fw_alerts = [a for a in alerts_payload if a["alert_type"] == "firmware_mismatch"]
+    assert len(fw_alerts) >= 1
+    assert "2.0.0-hacked" in fw_alerts[0]["reason"]
+
+
+def test_smart_plug_ingest(tmp_path: Path) -> None:
+    app = load_app(sqlite_url(tmp_path / "platform_plug.db"))
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/ingest/telemetry",
+        json={
+            "device_id": "plug-001",
+            "device_type": "smart_plug",
+            "timestamp": "2026-03-21T10:00:00Z",
+            "power_watts": 15.2,
+            "voltage": 230.0,
+            "is_on": True,
+            "battery": 80,
+            "firmware_version": "1.0.2",
+            "mode": "normal",
+        },
+    )
+    assert response.status_code == 200
+
+    devices = client.get("/api/devices").json()
+    assert any(d["device_id"] == "plug-001" for d in devices)
+
+
+def test_ip_camera_ingest(tmp_path: Path) -> None:
+    app = load_app(sqlite_url(tmp_path / "platform_cam.db"))
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/ingest/telemetry",
+        json={
+            "device_id": "cam-001",
+            "device_type": "ip_camera",
+            "timestamp": "2026-03-21T10:00:00Z",
+            "fps": 25,
+            "resolution": "1080p",
+            "stream_active": True,
+            "bandwidth_kbps": 2500.0,
+            "battery": 70,
+            "firmware_version": "1.0.2",
+            "mode": "normal",
+        },
+    )
+    assert response.status_code == 200
+
+    devices = client.get("/api/devices").json()
+    assert any(d["device_id"] == "cam-001" for d in devices)
+
+
+def test_smart_door_lock_ingest(tmp_path: Path) -> None:
+    app = load_app(sqlite_url(tmp_path / "platform_lock.db"))
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/ingest/telemetry",
+        json={
+            "device_id": "lock-001",
+            "device_type": "smart_door_lock",
+            "timestamp": "2026-03-21T10:00:00Z",
+            "lock_state": "locked",
+            "access_attempts": 0,
+            "battery": 95,
+            "firmware_version": "1.0.2",
+            "mode": "normal",
+        },
+    )
+    assert response.status_code == 200
+
+    devices = client.get("/api/devices").json()
+    assert any(d["device_id"] == "lock-001" for d in devices)
+
+
+def test_dashboard_html_pages(tmp_path: Path) -> None:
+    app = load_app(sqlite_url(tmp_path / "platform_pages.db"))
+    client = TestClient(app)
+
+    client.post(
+        "/api/ingest/telemetry",
+        json={
+            "device_id": "page-test-001",
+            "device_type": "temperature_sensor",
+            "timestamp": "2026-03-21T10:00:00Z",
+            "temperature": 22.0,
+            "battery": 80,
+            "firmware_version": "1.0.2",
+            "mode": "normal",
+        },
+    )
+
+    overview = client.get("/")
+    assert overview.status_code == 200
+    assert "IoT Security Monitoring" in overview.text
+
+    devices_page = client.get("/dashboard/devices")
+    assert devices_page.status_code == 200
+    assert "page-test-001" in devices_page.text
+
+    alerts_page = client.get("/dashboard/alerts")
+    assert alerts_page.status_code == 200
+    assert "All Alerts" in alerts_page.text
+
+    detail_page = client.get("/dashboard/devices/page-test-001")
+    assert detail_page.status_code == 200
+    assert "page-test-001" in detail_page.text
+
+    not_found = client.get("/dashboard/devices/nonexistent-device")
+    assert not_found.status_code == 404

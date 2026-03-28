@@ -20,6 +20,7 @@ from .models.device import Device
 from .models.telemetry_event import TelemetryEvent
 from .schemas.ml import MLPredictRequest, MLPredictResponse, MLStatusResponse
 from .services.ml_runtime import MLRuntime
+from .services.mqtt_subscriber import MQTTSubscriber
 from .services.traffic_features import TrafficFeatureGenerator
 
 
@@ -99,6 +100,36 @@ app.mount("/static", StaticFiles(directory=str(app_dir / "static")), name="stati
 
 ml_runtime = MLRuntime(model_path=settings.ml_model_path)
 traffic_generator = TrafficFeatureGenerator(seed=42)
+
+
+def _mqtt_ingest_callback(payload_dict: dict) -> None:
+    """Called by the MQTT subscriber thread for each valid message."""
+    from .db.session import SessionLocal, ensure_db_initialized
+
+    ensure_db_initialized()
+    try:
+        parsed = TelemetryIngestRequest.model_validate(payload_dict)
+    except Exception:
+        return
+
+    db = SessionLocal()
+    try:
+        _ingest_telemetry(db, parsed)
+    finally:
+        db.close()
+
+
+mqtt_subscriber = MQTTSubscriber(ingest_callback=_mqtt_ingest_callback)
+
+
+@app.on_event("startup")
+def _start_mqtt() -> None:
+    mqtt_subscriber.start()
+
+
+@app.on_event("shutdown")
+def _stop_mqtt() -> None:
+    mqtt_subscriber.stop()
 
 
 def _ml_severity(risk_level: str) -> str:
@@ -427,8 +458,6 @@ def _ingest_telemetry(
             current_last_seen = current_last_seen.replace(tzinfo=UTC)
         if current_last_seen is None or normalized_ts >= current_last_seen:
             existing_device.last_seen_at = normalized_ts
-        if payload.firmware_version:
-            existing_device.firmware_version = payload.firmware_version
 
     payload_json = json.dumps(payload.model_dump(mode="json"), ensure_ascii=False)
     telemetry_event = TelemetryEvent(
@@ -442,6 +471,9 @@ def _ingest_telemetry(
     generated_alerts.extend(
         _evaluate_telemetry_rules(db, payload, existing_device=existing_device)
     )
+
+    if existing_device is not None and payload.firmware_version:
+        existing_device.firmware_version = payload.firmware_version
 
     if ml_runtime.get_status().get("ready_for_inference"):
         try:
@@ -735,6 +767,41 @@ def overview(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
             "devices": devices,
             "risk_explanations": risk_explanations,
         },
+    )
+
+
+@app.get("/dashboard/devices", response_class=HTMLResponse)
+def dashboard_devices(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    summary = _get_summary(db)
+    devices = _list_devices(db, limit=200)
+    return templates.TemplateResponse(
+        request=request,
+        name="devices.html",
+        context={"summary": summary, "devices": devices},
+    )
+
+
+@app.get("/dashboard/alerts", response_class=HTMLResponse)
+def dashboard_alerts(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    alerts = _list_alerts(db, limit=200)
+    return templates.TemplateResponse(
+        request=request,
+        name="alerts.html",
+        context={"alerts": alerts},
+    )
+
+
+@app.get("/dashboard/devices/{device_id}", response_class=HTMLResponse)
+def dashboard_device_detail(
+    request: Request, device_id: str, db: Session = Depends(get_db)
+) -> HTMLResponse:
+    detail = _get_device_detail(db, device_id=device_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return templates.TemplateResponse(
+        request=request,
+        name="device_detail.html",
+        context={"detail": detail},
     )
 
 
