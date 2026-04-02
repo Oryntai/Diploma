@@ -55,6 +55,7 @@ try {
 # Send normal telemetry from all device types
 Write-Host ""
 Write-Host "Sending normal telemetry..." -ForegroundColor Yellow
+$ErrorActionPreference = "Continue"
 $deviceTypes = @("temperature_sensor", "smart_plug", "ip_camera", "smart_door_lock")
 foreach ($dt in $deviceTypes) {
     python simulator/main.py --once --seed 42 --device-type $dt --mode normal --ingest-url http://127.0.0.1:8000/api/ingest/telemetry 2>$null | Out-Null
@@ -72,6 +73,7 @@ Write-Host ""
 Write-Host "Sending abnormal telemetry (ML detection)..." -ForegroundColor Yellow
 python simulator/main.py --once --seed 99 --device-type temperature_sensor --mode abnormal --ingest-url http://127.0.0.1:8000/api/ingest/telemetry 2>$null | Out-Null
 Write-Host "[OK] Abnormal telemetry sent" -ForegroundColor Green
+$ErrorActionPreference = "Stop"
 
 # Open browser
 Write-Host ""
