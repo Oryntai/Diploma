@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IoT Security Monitoring Platform</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/dashboard.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 <body>
 <main class="page-shell">
@@ -14,8 +15,8 @@
             <h1>IoT Security Monitoring Platform</h1>
         </div>
         <div class="actions">
-            <button type="button">Export Report</button>
-            <button type="button" class="primary">Run Scan</button>
+            <button type="button" id="btn-export">Export Report</button>
+            <button type="button" class="primary" id="btn-scan">Run Scan</button>
             <button type="button" id="theme-toggle" class="theme-toggle" aria-pressed="false">
                 Dark mode
             </button>
@@ -118,6 +119,21 @@
                 <ul id="risk-current-reasons" class="risk-explainer-list"></ul>
             </article>
         </aside>
+    </section>
+
+    <section class="charts-row">
+        <article class="card chart-card">
+            <h2>Alerts by Severity</h2>
+            <canvas id="chart-severity" height="260"></canvas>
+        </article>
+        <article class="card chart-card">
+            <h2>Alerts by Type</h2>
+            <canvas id="chart-type" height="260"></canvas>
+        </article>
+        <article class="card chart-card">
+            <h2>Detection Source</h2>
+            <canvas id="chart-source" height="260"></canvas>
+        </article>
     </section>
 
     <section class="card ml-status">
@@ -268,6 +284,153 @@
             const nextTheme = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
             applyTheme(nextTheme);
             localStorage.setItem(storageKey, nextTheme);
+        });
+    }
+
+    /* ---------- Live refresh (every 3s) ---------- */
+    let chartSeverity = null, chartType = null, chartSource = null;
+
+    const initCharts = (data) => {
+        const severityColors = {
+            critical: "#dc2626", high: "#ea580c", medium: "#f59e0b", low: "#22c55e"
+        };
+        const sev = data.alerts_by_severity || {};
+        chartSeverity = new Chart(document.getElementById("chart-severity"), {
+            type: "doughnut",
+            data: {
+                labels: Object.keys(sev).map(s => s.charAt(0).toUpperCase() + s.slice(1)),
+                datasets: [{ data: Object.values(sev), backgroundColor: Object.keys(sev).map(s => severityColors[s] || "#94a3b8") }]
+            },
+            options: { responsive: true, animation: false, plugins: { legend: { position: "bottom" } } }
+        });
+
+        const byType = data.alerts_by_type || {};
+        chartType = new Chart(document.getElementById("chart-type"), {
+            type: "bar",
+            data: {
+                labels: Object.keys(byType),
+                datasets: [{ label: "Alerts", data: Object.values(byType), backgroundColor: "#3b82f6" }]
+            },
+            options: { responsive: true, animation: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+        });
+
+        const bySrc = data.alerts_by_source || {};
+        chartSource = new Chart(document.getElementById("chart-source"), {
+            type: "doughnut",
+            data: {
+                labels: Object.keys(bySrc).map(s => s === "rule_engine" ? "Rule Engine" : s === "ml_model" ? "ML Model" : s),
+                datasets: [{ data: Object.values(bySrc), backgroundColor: ["#3b82f6", "#8b5cf6", "#06b6d4", "#f97316"] }]
+            },
+            options: { responsive: true, animation: false, plugins: { legend: { position: "bottom" } } }
+        });
+    };
+
+    const updateCharts = (data) => {
+        const severityColors = { critical: "#dc2626", high: "#ea580c", medium: "#f59e0b", low: "#22c55e" };
+        if (chartSeverity) {
+            const sev = data.alerts_by_severity || {};
+            chartSeverity.data.labels = Object.keys(sev).map(s => s.charAt(0).toUpperCase() + s.slice(1));
+            chartSeverity.data.datasets[0].data = Object.values(sev);
+            chartSeverity.data.datasets[0].backgroundColor = Object.keys(sev).map(s => severityColors[s] || "#94a3b8");
+            chartSeverity.update();
+        }
+        if (chartType) {
+            const byType = data.alerts_by_type || {};
+            chartType.data.labels = Object.keys(byType);
+            chartType.data.datasets[0].data = Object.values(byType);
+            chartType.update();
+        }
+        if (chartSource) {
+            const bySrc = data.alerts_by_source || {};
+            chartSource.data.labels = Object.keys(bySrc).map(s => s === "rule_engine" ? "Rule Engine" : s === "ml_model" ? "ML Model" : s);
+            chartSource.data.datasets[0].data = Object.values(bySrc);
+            chartSource.update();
+        }
+    };
+
+    const kpiEls = document.querySelectorAll(".kpis .kpi strong");
+
+    const refreshDashboard = async () => {
+        try {
+            const [summary, charts, devices] = await Promise.all([
+                fetch("/api/stats/summary").then(r => r.json()),
+                fetch("/api/stats/charts").then(r => r.json()),
+                fetch("/api/devices?limit=12").then(r => r.json()),
+            ]);
+
+            /* KPIs */
+            if (kpiEls.length >= 4) {
+                kpiEls[0].textContent = summary.total_devices;
+                kpiEls[1].textContent = summary.active_alerts;
+                kpiEls[2].textContent = (summary.alerts_by_severity.high || 0) + (summary.alerts_by_severity.critical || 0);
+                kpiEls[3].textContent = summary.avg_security_score;
+            }
+
+            /* Risk distribution sidebar */
+            riskButtons.forEach(btn => {
+                const sev = btn.dataset.riskSeverity;
+                const count = summary.alerts_by_severity[sev] || 0;
+                btn.dataset.riskCount = count;
+                btn.querySelector("b").textContent = count;
+            });
+
+            /* Device table */
+            const tbody = document.querySelector(".device-overview tbody");
+            if (tbody && devices.length > 0) {
+                tbody.innerHTML = devices.map(d => `
+                    <tr>
+                        <td>${d.device_id}</td>
+                        <td>${d.device_type}</td>
+                        <td><span class="badge ${d.status === 'online' ? 'online' : 'offline'}">${d.status}</span></td>
+                        <td>${d.battery !== null ? d.battery + '%' : '--'}</td>
+                        <td>${d.firmware_version || '--'}</td>
+                        <td><span class="badge risk-${d.risk_level.toLowerCase()}">${d.risk_level}</span></td>
+                        <td>${d.main_issue}</td>
+                        <td class="recommendation-cell">${d.recommendation}</td>
+                    </tr>
+                `).join("");
+            }
+
+            /* Charts */
+            if (!chartSeverity) {
+                initCharts(charts);
+            } else {
+                updateCharts(charts);
+            }
+        } catch (e) { /* backend offline, skip */ }
+    };
+
+    /* Initial load + interval */
+    refreshDashboard();
+    setInterval(refreshDashboard, 3000);
+
+    const btnExport = document.getElementById("btn-export");
+    if (btnExport) {
+        btnExport.addEventListener("click", () => {
+            window.location.href = "/api/export/report";
+        });
+    }
+
+    const btnScan = document.getElementById("btn-scan");
+    if (btnScan) {
+        btnScan.addEventListener("click", async () => {
+            btnScan.disabled = true;
+            btnScan.textContent = "Scanning...";
+            try {
+                const resp = await fetch("/api/scan/run", { method: "POST" });
+                const data = await resp.json();
+                if (resp.ok) {
+                    alert("Scan completed!\n\n" + data.results.join("\n"));
+                    window.location.reload();
+                } else {
+                    alert("Scan failed: " + (data.detail || "Unknown error"));
+                }
+            } catch (err) {
+                alert("Scan error: " + err.message);
+            } finally {
+                btnScan.disabled = false;
+                btnScan.textContent = "Run Scan";
+            }
         });
     }
 })();

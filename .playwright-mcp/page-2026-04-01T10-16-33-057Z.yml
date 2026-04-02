@@ -1,0 +1,194 @@
+- main [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - paragraph [ref=e5]: Local diploma prototype
+      - heading "IoT Security Monitoring Platform" [level=1] [ref=e6]
+    - generic [ref=e7]:
+      - button "Export Report" [ref=e8] [cursor=pointer]
+      - button "Run Scan" [ref=e9] [cursor=pointer]
+      - button "Light mode" [pressed] [ref=e10] [cursor=pointer]
+  - navigation [ref=e11]:
+    - link "Overview" [ref=e12] [cursor=pointer]:
+      - /url: /
+    - link "Devices" [ref=e13] [cursor=pointer]:
+      - /url: /dashboard/devices
+    - link "Alerts" [ref=e14] [cursor=pointer]:
+      - /url: /dashboard/alerts
+  - generic [ref=e15]:
+    - article [ref=e16]:
+      - paragraph [ref=e17]: Total Devices
+      - strong [ref=e18]: "9"
+    - article [ref=e19]:
+      - paragraph [ref=e20]: Active Alerts
+      - strong [ref=e21]: "24"
+    - article [ref=e22]:
+      - paragraph [ref=e23]: High/Critical Risk
+      - strong [ref=e24]: "19"
+    - article [ref=e25]:
+      - paragraph [ref=e26]: Avg. Security Score
+      - strong [ref=e27]: "41.1"
+  - generic [ref=e28]:
+    - article [ref=e29]:
+      - heading "Device Overview" [level=2] [ref=e30]
+      - table [ref=e31]:
+        - rowgroup [ref=e32]:
+          - row "Device Type Status Battery Firmware Risk Main Issue Recommendations" [ref=e33]:
+            - columnheader "Device" [ref=e34]
+            - columnheader "Type" [ref=e35]
+            - columnheader "Status" [ref=e36]
+            - columnheader "Battery" [ref=e37]
+            - columnheader "Firmware" [ref=e38]
+            - columnheader "Risk" [ref=e39]
+            - columnheader "Main Issue" [ref=e40]
+            - columnheader "Recommendations" [ref=e41]
+        - rowgroup [ref=e42]:
+          - 'row "cam-ml-demo ip_camera unverified 5% 1.0.2 Critical ML model detected anomalous network behavior. Reconstruction error: 2.963241 (threshold: 0.048003). Risk level: Critical. Verify device identity and approve only if source is trusted." [ref=e43]':
+            - cell "cam-ml-demo" [ref=e44]
+            - cell "ip_camera" [ref=e45]
+            - cell "unverified" [ref=e46]
+            - cell "5%" [ref=e47]
+            - cell "1.0.2" [ref=e48]
+            - cell "Critical" [ref=e49]
+            - 'cell "ML model detected anomalous network behavior. Reconstruction error: 2.963241 (threshold: 0.048003). Risk level: Critical." [ref=e50]'
+            - cell "Verify device identity and approve only if source is trusted." [ref=e51]
+          - 'row "lock-firmware-demo smart_door_lock unverified 94% 2.0.0-hacked High Firmware version changed unexpectedly: ''1.0.2'' -> ''2.0.0-hacked''. Possible unauthorized update or device spoofing. Verify device identity and approve only if source is trusted." [ref=e52]':
+            - cell "lock-firmware-demo" [ref=e53]
+            - cell "smart_door_lock" [ref=e54]
+            - cell "unverified" [ref=e55]
+            - cell "94%" [ref=e56]
+            - cell "2.0.0-hacked" [ref=e57]
+            - cell "High" [ref=e58]
+            - 'cell "Firmware version changed unexpectedly: ''1.0.2'' -> ''2.0.0-hacked''. Possible unauthorized update or device spoofing." [ref=e59]'
+            - cell "Verify device identity and approve only if source is trusted." [ref=e60]
+          - row "rogue-device-xyz-999 smart_plug unverified 90% 0.9.9 High First-seen device is marked unverified. Review identity before treating as trusted. Verify device identity and approve only if source is trusted." [ref=e61]:
+            - cell "rogue-device-xyz-999" [ref=e62]
+            - cell "smart_plug" [ref=e63]
+            - cell "unverified" [ref=e64]
+            - cell "90%" [ref=e65]
+            - cell "0.9.9" [ref=e66]
+            - cell "High" [ref=e67]
+            - cell "First-seen device is marked unverified. Review identity before treating as trusted." [ref=e68]
+            - cell "Verify device identity and approve only if source is trusted." [ref=e69]
+          - 'row "temp-impossible-demo temperature_sensor unverified 75% 1.0.2 High Temperature value is out of accepted range: -45.0C (allowed -20.0C..60.0C). Verify device identity and approve only if source is trusted." [ref=e70]':
+            - cell "temp-impossible-demo" [ref=e71]
+            - cell "temperature_sensor" [ref=e72]
+            - cell "unverified" [ref=e73]
+            - cell "75%" [ref=e74]
+            - cell "1.0.2" [ref=e75]
+            - cell "High" [ref=e76]
+            - 'cell "Temperature value is out of accepted range: -45.0C (allowed -20.0C..60.0C)." [ref=e77]'
+            - cell "Verify device identity and approve only if source is trusted." [ref=e78]
+          - 'row "flood-sensor-demo temperature_sensor unverified 80% 1.0.2 High Telemetry flood detected: 20 messages in 60s window. Verify device identity and approve only if source is trusted." [ref=e79]':
+            - cell "flood-sensor-demo" [ref=e80]
+            - cell "temperature_sensor" [ref=e81]
+            - cell "unverified" [ref=e82]
+            - cell "80%" [ref=e83]
+            - cell "1.0.2" [ref=e84]
+            - cell "High" [ref=e85]
+            - 'cell "Telemetry flood detected: 20 messages in 60s window." [ref=e86]'
+            - cell "Verify device identity and approve only if source is trusted." [ref=e87]
+          - row "ip-camera-001 ip_camera unverified 93% 1.0.2 High First-seen device is marked unverified. Review identity before treating as trusted. Verify device identity and approve only if source is trusted." [ref=e88]:
+            - cell "ip-camera-001" [ref=e89]
+            - cell "ip_camera" [ref=e90]
+            - cell "unverified" [ref=e91]
+            - cell "93%" [ref=e92]
+            - cell "1.0.2" [ref=e93]
+            - cell "High" [ref=e94]
+            - cell "First-seen device is marked unverified. Review identity before treating as trusted." [ref=e95]
+            - cell "Verify device identity and approve only if source is trusted." [ref=e96]
+          - row "smart-door-lock-001 smart_door_lock unverified 93% 1.0.2 High First-seen device is marked unverified. Review identity before treating as trusted. Verify device identity and approve only if source is trusted." [ref=e97]:
+            - cell "smart-door-lock-001" [ref=e98]
+            - cell "smart_door_lock" [ref=e99]
+            - cell "unverified" [ref=e100]
+            - cell "93%" [ref=e101]
+            - cell "1.0.2" [ref=e102]
+            - cell "High" [ref=e103]
+            - cell "First-seen device is marked unverified. Review identity before treating as trusted." [ref=e104]
+            - cell "Verify device identity and approve only if source is trusted." [ref=e105]
+          - row "smart-plug-001 smart_plug unverified 88% 1.0.2 High First-seen device is marked unverified. Review identity before treating as trusted. Verify device identity and approve only if source is trusted." [ref=e106]:
+            - cell "smart-plug-001" [ref=e107]
+            - cell "smart_plug" [ref=e108]
+            - cell "unverified" [ref=e109]
+            - cell "88%" [ref=e110]
+            - cell "1.0.2" [ref=e111]
+            - cell "High" [ref=e112]
+            - cell "First-seen device is marked unverified. Review identity before treating as trusted." [ref=e113]
+            - cell "Verify device identity and approve only if source is trusted." [ref=e114]
+          - 'row "temperature-sensor-001 temperature_sensor unverified 16% 1.0.2 Critical ML model detected anomalous network behavior. Reconstruction error: 1.952130 (threshold: 0.048003). Risk level: Critical. Verify device identity and approve only if source is trusted." [ref=e115]':
+            - cell "temperature-sensor-001" [ref=e116]
+            - cell "temperature_sensor" [ref=e117]
+            - cell "unverified" [ref=e118]
+            - cell "16%" [ref=e119]
+            - cell "1.0.2" [ref=e120]
+            - cell "Critical" [ref=e121]
+            - 'cell "ML model detected anomalous network behavior. Reconstruction error: 1.952130 (threshold: 0.048003). Risk level: Critical." [ref=e122]'
+            - cell "Verify device identity and approve only if source is trusted." [ref=e123]
+    - complementary [ref=e124]:
+      - article [ref=e125]:
+        - heading "Risk Distribution" [level=2] [ref=e126]
+        - list [ref=e127]:
+          - listitem [ref=e128]:
+            - button "Critical 3" [pressed] [ref=e129] [cursor=pointer]:
+              - generic [ref=e130]: Critical
+              - generic [ref=e131]: "3"
+          - listitem [ref=e132]:
+            - button "High 16" [ref=e133] [cursor=pointer]:
+              - generic [ref=e134]: High
+              - generic [ref=e135]: "16"
+          - listitem [ref=e136]:
+            - button "Medium 5" [ref=e137] [cursor=pointer]:
+              - generic [ref=e138]: Medium
+              - generic [ref=e139]: "5"
+          - listitem [ref=e140]:
+            - button "Low 0" [ref=e141] [cursor=pointer]:
+              - generic [ref=e142]: Low
+              - generic [ref=e143]: "0"
+      - article [ref=e144]:
+        - heading "Risk Class Details" [level=2] [ref=e145]
+        - paragraph [ref=e146]: Critical (3)
+        - paragraph [ref=e147]: Highest urgency class. Indicates immediate compromise risk or multiple severe signals that need incident response now.
+        - paragraph [ref=e148]:
+          - strong [ref=e149]: "Score range:"
+          - text: 70-100 risk points
+        - paragraph [ref=e150]:
+          - strong [ref=e151]: "Why this class is active:"
+          - text: 3 open alert(s) are currently mapped to Critical severity.
+        - heading "Typical reasons" [level=3] [ref=e152]
+        - list [ref=e153]:
+          - listitem [ref=e154]: Device spoofing combined with repeated suspicious telemetry
+          - listitem [ref=e155]: Multiple high-impact alerts from one device in short time
+          - listitem [ref=e156]: Escalation from unresolved high-severity incidents
+        - heading "Current reasons in your data" [level=3] [ref=e157]
+        - list [ref=e158]:
+          - listitem [ref=e159]: "cam-ml-demo: ML model detected anomalous network behavior. Reconstruction error: 2.963241 (threshold: 0.048003). Risk level: Critical."
+          - listitem [ref=e160]: "temperature-sensor-001: ML model detected anomalous network behavior. Reconstruction error: 1.952130 (threshold: 0.048003). Risk level: Critical."
+          - listitem [ref=e161]: "temperature-sensor-001: ML model detected anomalous network behavior. Reconstruction error: 5.317992 (threshold: 0.048003). Risk level: Critical."
+  - generic [ref=e162]:
+    - article [ref=e163]:
+      - heading "Alerts by Severity" [level=2] [ref=e164]
+    - article [ref=e166]:
+      - heading "Alerts by Type" [level=2] [ref=e167]
+    - article [ref=e169]:
+      - heading "Detection Source" [level=2] [ref=e170]
+  - generic [ref=e172]:
+    - heading "ML Integration Readiness" [level=2] [ref=e173]
+    - list [ref=e174]:
+      - listitem [ref=e175]:
+        - strong [ref=e176]: "Configured path:"
+        - code [ref=e177]: D:\Diploma\backend\models\best_autoencoder_ciciot23.pt
+      - listitem [ref=e178]:
+        - strong [ref=e179]: "Model format:"
+        - text: torch_autoencoder
+      - listitem [ref=e180]:
+        - strong [ref=e181]: "File exists:"
+        - text: "True"
+      - listitem [ref=e182]:
+        - strong [ref=e183]: "Loaded:"
+        - text: "True"
+      - listitem [ref=e184]:
+        - strong [ref=e185]: "Ready for inference:"
+        - text: "True"
+      - listitem [ref=e186]:
+        - strong [ref=e187]: "Env override:"
+        - code [ref=e188]: ML_MODEL_PATH
+    - paragraph [ref=e189]: Model is loaded and ready for inference.

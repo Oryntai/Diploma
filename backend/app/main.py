@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field
@@ -742,6 +744,62 @@ def _build_risk_explanations(
     return explanations
 
 
+@app.get("/api/export/report")
+def export_report(db: Session = Depends(get_db)) -> JSONResponse:
+    """Export full system report as JSON."""
+    summary = _get_summary(db)
+    devices = _list_devices(db, limit=500)
+    alert_list = _list_alerts(db, limit=500)
+    ml_st = ml_runtime.get_status()
+
+    report = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "summary": summary.model_dump(),
+        "ml_status": ml_st,
+        "devices": [d.model_dump() for d in devices],
+        "alerts": [a.model_dump() for a in alert_list],
+    }
+    return JSONResponse(
+        content=json.loads(json.dumps(report, default=str)),
+        headers={
+            "Content-Disposition": "attachment; filename=iot_security_report.json",
+        },
+    )
+
+
+class RunScanResponse(BaseModel):
+    status: str
+    scenarios_run: list[str]
+    results: list[str]
+
+
+@app.post("/api/scan/run", response_model=RunScanResponse)
+def run_scan(db: Session = Depends(get_db)) -> RunScanResponse:
+    """Run all demo threat scenarios against the running backend."""
+    scenario_script = Path(__file__).resolve().parent.parent.parent.parent / "simulator" / "scenarios" / "run_scenario.py"
+    if not scenario_script.is_file():
+        raise HTTPException(status_code=404, detail="Scenario runner not found")
+
+    results: list[str] = []
+    scenarios = ["flood", "impossible_value", "unknown_device", "firmware_mismatch"]
+    for scenario in scenarios:
+        try:
+            proc = subprocess.run(
+                [sys.executable, str(scenario_script), "--scenario", scenario,
+                 "--ingest-url", "http://127.0.0.1:8000/api/ingest/telemetry"],
+                capture_output=True, text=True, timeout=30,
+            )
+            results.append(f"{scenario}: OK" if proc.returncode == 0 else f"{scenario}: FAIL ({proc.stderr[:200]})")
+        except subprocess.TimeoutExpired:
+            results.append(f"{scenario}: TIMEOUT")
+
+    return RunScanResponse(
+        status="completed",
+        scenarios_run=scenarios,
+        results=results,
+    )
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {
@@ -863,6 +921,42 @@ def stats_summary(db: Session = Depends(get_db)) -> SummaryResponse:
 @app.get("/api/ml/status", response_model=MLStatusResponse)
 def ml_status() -> MLStatusResponse:
     return MLStatusResponse.model_validate(ml_runtime.get_status())
+
+
+@app.get("/api/stats/charts")
+def stats_charts(db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Data for dashboard charts."""
+    severity_rows = db.execute(
+        select(Alert.severity, func.count(Alert.id))
+        .where(Alert.status == "open")
+        .group_by(Alert.severity)
+    ).all()
+    by_severity = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    for sev, cnt in severity_rows:
+        key = str(sev).lower()
+        if key in by_severity:
+            by_severity[key] = int(cnt)
+
+    type_rows = db.execute(
+        select(Alert.alert_type, func.count(Alert.id))
+        .where(Alert.status == "open")
+        .group_by(Alert.alert_type)
+        .order_by(desc(func.count(Alert.id)))
+    ).all()
+    by_type = {str(t): int(c) for t, c in type_rows}
+
+    source_rows = db.execute(
+        select(Alert.source, func.count(Alert.id))
+        .where(Alert.status == "open")
+        .group_by(Alert.source)
+    ).all()
+    by_source = {str(s): int(c) for s, c in source_rows}
+
+    return {
+        "alerts_by_severity": by_severity,
+        "alerts_by_type": by_type,
+        "alerts_by_source": by_source,
+    }
 
 
 @app.post("/api/ml/predict", response_model=MLPredictResponse)

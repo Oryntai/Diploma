@@ -1,299 +1,156 @@
 # Интеллектуальная система мониторинга безопасности IoT
 
-Этот репозиторий содержит план, архитектурные документы и текущую реализацию дипломного прототипа локальной системы мониторинга безопасности IoT.
+Дипломный проект — локальный прототип системы мониторинга безопасности IoT-устройств с двухуровневым детектом угроз (правила + ML).
 
-## Текущий статус (скелет)
+## Возможности
 
-Сейчас реализован **минимальный рабочий скелет**, а не полный MVP:
+- Симуляция 4 типов IoT-устройств (термометр, розетка, камера, замок)
+- Приём телеметрии по HTTP и MQTT
+- Rule-based детект: 5 сценариев угроз (impossible_value, low_battery, message_flood, firmware_mismatch, unknown_device)
+- ML-детект: PyTorch autoencoder на CICIoT2023 (SYN flood, port scan, ARP spoofing, DNS tunnel, DDoS)
+- Web-dashboard с KPI, таблицами, Chart.js графиками, тёмной темой
+- Экспорт отчётов в JSON
+- Запуск сканирования из UI (кнопка Run Scan)
+- Демо-сценарии для защиты
 
-- backend на FastAPI с endpoint `GET /health`;
-- базовый слой SQLite и первые модели;
-- симулятор одного температурного датчика с детерминированным режимом;
-- HTTP ingest телеметрии в backend (`POST /api/ingest/telemetry`);
-- базовые rule-based алерты (`impossible_value`, `low_battery`, `message_flood`);
-- first-seen устройство получает статус `unverified` и alert `unknown_device`;
-- JSON endpoints для устройств/алертов/summary;
-- минимальные автотесты для smoke-проверки.
+## Архитектура
 
-Еще не реализовано на этом этапе:
+```
+simulator → MQTT broker (optional) → FastAPI backend → SQLite → dashboard
+                                          ↓
+                                    Rule Engine + ML Model
+                                          ↓
+                                       Alerts
+```
 
-- MQTT ingest в backend;
-- rule-engine и генерация алертов;
-- страницы dashboard.
+## Стек
 
-## Быстрый запуск текущего скелета
+- **Backend**: Python 3.11+, FastAPI, SQLAlchemy, Pydantic
+- **ML**: PyTorch (autoencoder), CICIoT2023
+- **DB**: SQLite
+- **UI**: Jinja2, Chart.js, vanilla CSS/JS
+- **Messaging**: MQTT (paho-mqtt, Mosquitto)
+- **Тесты**: pytest, httpx
 
-1. Установить зависимости backend:
+## Быстрый запуск
+
+### 1. Установить зависимости
 
 ```bash
-pip install -r backend/requirements.txt
+cd backend
+pip install -r requirements.txt
 ```
 
-2. Запустить backend из корня репозитория:
+### 2. Запустить backend
 
 ```bash
-python -m uvicorn app.main:app --app-dir backend --reload
+cd backend
+python -m uvicorn app.main:app --reload
 ```
 
-3. В другом терминале проверить health:
+### 3. Открыть dashboard
 
-```bash
-python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health').read().decode())"
+```
+http://127.0.0.1:8000/
 ```
 
-Ожидаемый ответ:
-
-```json
-{"status":"ok","service":"backend"}
-```
-
-4. Запустить симулятор один раз:
-
-```bash
-python simulator/main.py --once --seed 42
-```
-
-Команда печатает один детерминированный JSON payload и завершает работу.
-
-Чтобы сразу отправить telemetry в backend:
+### 4. Отправить нормальную телеметрию
 
 ```bash
 python simulator/main.py --once --seed 42 --ingest-url http://127.0.0.1:8000/api/ingest/telemetry
 ```
 
-Проверить, что данные появились в API:
+### 5. Запустить сценарии угроз
 
 ```bash
-python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/api/devices').read().decode())"
-python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/api/alerts/recent').read().decode())"
-python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/api/stats/summary').read().decode())"
+python simulator/scenarios/run_scenario.py --scenario all --ingest-url http://127.0.0.1:8000/api/ingest/telemetry
 ```
 
-5. Открыть стартовую веб-страницу и проверить ML readiness:
+### 6. Запустить тесты
 
 ```bash
-python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/api/ml/status').read().decode())"
+cd backend
+python -m pytest tests/ -v
 ```
 
-В браузере:
+## Или одной командой (PowerShell)
 
-- `http://127.0.0.1:8000/` — overview dashboard с блоком `ML Integration Readiness`.
-
-Отдельная инструкция по подключению обученной модели:
-
-- `docs/ml-integration.md`
-
-## Как логировать данные с реального пылесоса (STYTJ02YM)
-
-Для модели `Mi Robot Vacuum-Mop P (STYTJ02YM)` мы используем схему:
-
-```text
-Vacuum (STYTJ02YM) -> Python adapter (python-miio) -> FastAPI ingest endpoint -> SQLite
+```powershell
+.\scripts\run_local.ps1
 ```
 
-### Почему именно так
+## Типы устройств
 
-- `python-miio` поддерживает Viomi-линейку (в том числе `viomi.vacuum.v8`, к которой относится STYTJ02YM).
-- Можно опрашивать устройство в локальной сети без обязательной cloud-интеграции в runtime.
-- Поля статуса и ошибок доступны в структурированном виде (`ViomiVacuumStatus`).
+| Тип | Поля | Аномалии |
+|-----|------|----------|
+| Temperature Sensor | temperature, battery, firmware | 70–80°C, батарея 10–25% |
+| Smart Plug | power_watts, voltage, is_on | 500–2000W, напряжение 180–280V |
+| IP Camera | fps, resolution, bandwidth | fps 1–8, bandwidth 8–15K kbps |
+| Smart Door Lock | lock_state, access_attempts | 10–50 попыток доступа |
 
-### Что нужно для подключения
+## Детектируемые угрозы
 
-1. IP пылесоса в локальной сети.
-2. Токен устройства (32 hex символа) — обычно извлекается через MiToolkit/HA guide.
-3. Python-адаптер, который раз в N секунд читает статус и отправляет JSON в backend.
+### Rule Engine (5 правил)
+1. `impossible_value` — температура вне [-20, 60]°C
+2. `low_battery` — батарея < 20%
+3. `message_flood` — >20 сообщений за 60 сек
+4. `firmware_mismatch` — смена прошивки
+5. `unknown_device` — неизвестное устройство
 
-### Какие поля реально логируем в backend
+### ML Model (5 типов атак)
+1. SYN Flood — завалить соединениями
+2. Port Scan — сканирование портов
+3. ARP Spoofing — подмена адреса
+4. DNS Tunnel — скрытый канал
+5. DDoS — массированная атака
 
-Минимальный набор для security-monitoring:
+## API
 
-- `device_id` (например `vacuum-stytj02ym-01`)
-- `device_type` (`robot_vacuum`)
-- `timestamp` (UTC)
-- `battery`
-- `charging`
-- `vacuum_state` (idle/cleaning/returning/docked/paused/...)
-- `error_code`
-- `error`
-- `clean_area`
-- `clean_time`
-- `fanspeed`
-- `water_grade`
-- `has_map`
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| GET | `/health` | Health check |
+| GET | `/` | Dashboard overview |
+| GET | `/dashboard/devices` | Список устройств |
+| GET | `/dashboard/alerts` | Список алертов |
+| GET | `/dashboard/devices/{id}` | Детали устройства |
+| POST | `/api/ingest/telemetry` | Приём телеметрии |
+| GET | `/api/devices` | JSON список устройств |
+| GET | `/api/alerts` | JSON список алертов |
+| GET | `/api/stats/summary` | Сводка |
+| GET | `/api/stats/charts` | Данные для графиков |
+| GET | `/api/ml/status` | Статус ML-модели |
+| POST | `/api/ml/predict` | ML-инференс |
+| GET | `/api/export/report` | Экспорт отчёта |
+| POST | `/api/scan/run` | Запуск сканирования |
 
-Расширенный набор (зависит от прошивки):
+## Структура проекта
 
-- `bin_type`, `mop_attached`, `route_pattern`, `map_number`, `current_map_id`, `water_percent`.
+```
+backend/
+  app/
+    main.py              # FastAPI app, routes, rule engine
+    models/              # SQLAlchemy ORM (Device, Alert, TelemetryEvent)
+    services/
+      ml_runtime.py      # ML model loader & inference
+      traffic_features.py # CICIoT2023 feature generator
+      mqtt_subscriber.py # MQTT listener
+    templates/           # Jinja2 HTML pages
+    static/              # CSS
+  tests/                 # pytest tests
+  models/                # ML model artifacts
 
-### Как именно отправляем в наш backend
+simulator/
+  devices/               # 4 device type simulators
+  scenarios/             # 5 threat scenarios
+  main.py                # CLI entry point
 
-Адаптер делает polling и шлет payload в endpoint (план):
-
-`POST /api/ingest/vacuum`
-
-Пример payload:
-
-```json
-{
-  "device_id": "vacuum-stytj02ym-01",
-  "device_type": "robot_vacuum",
-  "model": "STYTJ02YM",
-  "timestamp": "2026-03-21T10:15:00Z",
-  "battery": 66,
-  "charging": false,
-  "vacuum_state": "cleaning",
-  "error_code": 0,
-  "error": "No error",
-  "clean_area": 37.2,
-  "clean_time": 2520,
-  "fanspeed": "standard",
-  "water_grade": "medium",
-  "has_map": true,
-  "source": "python-miio-adapter"
-}
+docs/                    # Architecture, API, threat model, demo script
 ```
 
-### Ограничения, которые учитываем
+## Документация
 
-- Для отдельных EU-прошивок STYTJ02YM часть свойств может не возвращаться.
-- Поэтому backend должен поддерживать частично заполненный payload (nullable поля).
-- Cloud-вариант (через Home Assistant Xiaomi Cloud Map Extractor) оставляем как fallback, но основной путь — локальный адаптер.
-
-### Источники ресерча
-
-- `python-miio` (репозиторий): https://github.com/rytilahti/python-miio
-- API docs Viomi vacuum (`ViomiVacuumStatus`): https://python-miio.readthedocs.io/en/latest/api/miio.integrations.viomi.vacuum.html
-- Known issue для STYTJ02YM/EU firmware: https://github.com/rytilahti/python-miio/issues/1003
-- Cloud fallback (HA Xiaomi Cloud Map Extractor): https://github.com/PiotrMachowski/Home-Assistant-custom-components-Xiaomi-Cloud-Map-Extractor
-
-## Цель проекта
-
-Собрать локальный прототип, который:
-
-- симулирует несколько типов IoT-устройств;
-- передает телеметрию через MQTT;
-- принимает сообщения в backend (FastAPI);
-- хранит состояние устройств, телеметрию и алерты в SQLite;
-- обнаруживает подозрительное поведение (в первую очередь правилами);
-- показывает состояние системы в веб-интерфейсе.
-
-Проект должен оставаться «дипломным»:
-
-- без обязательной облачной инфраструктуры;
-- без тяжелого frontend-фреймворка;
-- без обязательного ML в MVP;
-- с запуском на одном ноутбуке.
-
-## Обязательные границы MVP
-
-Обязательно:
-
-- Python 3.11+;
-- FastAPI;
-- MQTT + Mosquitto;
-- SQLite;
-- Jinja2 + Chart.js;
-- минимум 4 типа устройств;
-- минимум 5 детектируемых сценариев угроз.
-
-Опционально после MVP:
-
-- Isolation Forest или аналог;
-- pandas для офлайн-анализа;
-- путь миграции на PostgreSQL.
-
-Не входит в первый цикл:
-
-- microservices;
-- Kubernetes;
-- cloud deployment;
-- сложная аутентификация;
-- mobile app;
-- deep learning;
-- обязательные LLM-фичи.
-
-## Базовая архитектура
-
-```text
-simulator -> MQTT broker -> FastAPI backend -> SQLite -> dashboard
-```
-
-## Целевой вид dashboard (по референс-скринам)
-
-Ниже зафиксирован ожидаемый результат интерфейса, к которому идем в реализации.
-
-### Верхняя зона
-
-- Заголовок: `IoT Security Monitoring Platform`.
-- Кнопки справа: `Export Report` и `Run Scan`.
-- 4 KPI-карточки:
-  - `Total Devices`
-  - `Active Alerts`
-  - `High/Critical Risk`
-  - `Avg. Security Score`
-
-### Средняя зона
-
-- Слева большой блок `Device Overview` (таблица):
-  - колонки `Device`, `Type`, `Status`, `Battery`, `Firmware`, `Risk`, `Main Issue`;
-  - цветные бейджи риска (`Low`, `Medium`, `High`, `Critical`);
-  - индикация online/offline.
-- Справа блок `Risk Distribution`:
-  - горизонтальные бары по уровням `Critical`, `High`, `Medium`, `Low`;
-  - справа число инцидентов по каждому уровню.
-- Под `Risk Distribution` блок `Recommendations`:
-  - список конкретных действий (обновить прошивку, сменить креды, ограничить доступ и т.д.).
-
-### Нижняя зона
-
-- Слева `Recent Security Alerts`:
-  - карточки последних алертов с устройством, временем и severity-бейджем.
-- Справа `System Flow`:
-  - 5 шагов пайплайна от получения telemetry до отображения алертов в админ-панели.
-
-### UX-правила для этого макета
-
-- layout в стиле clean admin panel;
-- светлая тема, аккуратные карточки и мягкие границы;
-- без перегрузки графиками, основной акцент на читаемости статуса и алертов;
-- UI должен быть одинаково читаем на ноутбуке и на проекционном экране при защите.
-
-## Порядок чтения документов
-
-1. `Todo.md` — мастер-бриф проекта.
-2. `README.md` — точка входа и правила работы.
-3. `docs/setup.md` — локальная подготовка и старт.
-4. `docs/architecture.md` — архитектура и поток данных.
-5. `docs/roadmap.md` — фазы реализации.
-6. `docs/testing.md` — стратегия тестирования.
-7. `docs/api.md` — API-контракт.
-8. `docs/demo-script.md` — сценарий защиты.
-9. `docs/threat-model.md` — модель угроз.
-10. `docs/team-workflow.md` — командный процесс.
-11. `docs/diploma-outline.md` — структура диплома.
-12. `docs/diploma-notes.md` — заметки для защиты.
-13. `docs/ml-integration.md` — как подключить обученную ML-модель.
-14. `docs/iot-simulation-plan.md` — план симуляции IoT для тестов платформы.
-15. `docs/recommendations.md` — рекомендации по каждому alert_type и варианты размещения в UI/API.
-
-## Документы по управлению реализацией
-
-Папка `docs/project-management/`:
-
-- `implementation-status.md` — что уже сделано;
-- `implementation-notes.md` — что именно построено простыми словами;
-- `technical-decisions.md` — ключевые технические решения и причины;
-- `open-items.md` — следующие шаги.
-
-## Что считается готовностью всего проекта
-
-Проект можно считать готовым, когда:
-
-- система поднимается локально по документации на «чистой» машине;
-- симулируются минимум 4 типа устройств;
-- детектируются минимум 5 сценариев;
-- алерты сохраняются и видны в UI;
-- у каждого алерта есть причина, severity и риск-оценка;
-- есть тестовое покрытие ключевых контуров;
-- есть воспроизводимый 3–5 минутный демо-сценарий;
-- команда может уверенно объяснить архитектуру и решения.
+- [docs/architecture.md](docs/architecture.md) — архитектура
+- [docs/api.md](docs/api.md) — API контракт
+- [docs/threat-model.md](docs/threat-model.md) — модель угроз
+- [docs/demo-script.md](docs/demo-script.md) — сценарий демо
+- [docs/ml-integration.md](docs/ml-integration.md) — ML интеграция

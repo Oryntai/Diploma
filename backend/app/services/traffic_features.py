@@ -19,90 +19,174 @@ _PROTOCOL_FEATURES = {
     "TCP", "UDP", "DHCP", "ARP", "ICMP", "IPv", "LLC",
 }
 
-DEVICE_PROFILES: dict[str, dict[str, float]] = {
+# ---------------------------------------------------------------------------
+# CICIoT23 scaler statistics (mean / std) extracted from scaler_ciciot23.pkl.
+# ---------------------------------------------------------------------------
+
+_SCALER_STATS: dict[str, tuple[float, float]] = {
+    "flow_duration":     (39.2982,        54.2507),
+    "Header_Length":     (1_015_165.5359, 1_331_985.1537),
+    "Protocol Type":     (7.4873,         2.2591),
+    "Duration":          (115.2364,       51.2916),
+    "Rate":              (1955.9181,      19_971.9773),
+    "Srate":             (1955.9181,      19_971.9773),
+    "Drate":             (0.0,            1.0),
+    "fin_flag_number":   (0.0,            0.0028),
+    "syn_flag_number":   (0.0,            0.0063),
+    "rst_flag_number":   (0.0,            0.0063),
+    "psh_flag_number":   (0.0178,         0.1322),
+    "ack_flag_number":   (0.8489,         0.3582),
+    "ece_flag_number":   (0.0,            1.0),
+    "cwr_flag_number":   (0.0,            1.0),
+    "ack_count":         (0.0426,         0.1346),
+    "syn_count":         (0.8013,         0.7721),
+    "fin_count":         (0.0115,         0.4899),
+    "urg_count":         (118.0856,       167.4301),
+    "rst_count":         (1072.4524,      1244.8013),
+    "HTTP":              (0.0389,         0.1934),
+    "HTTPS":             (0.7109,         0.4533),
+    "DNS":               (0.0018,         0.0427),
+    "Telnet":            (0.0,            1.0),
+    "SMTP":              (0.0,            1.0),
+    "SSH":               (0.0,            1.0),
+    "IRC":               (0.0,            1.0),
+    "TCP":               (0.8608,         0.3461),
+    "UDP":               (0.0681,         0.2519),
+    "DHCP":              (0.0,            1.0),
+    "ARP":               (0.0003,         0.0178),
+    "ICMP":              (0.0,            0.0028),
+    "IPv":               (0.9993,         0.0268),
+    "LLC":               (0.9993,         0.0268),
+    "Tot sum":           (6509.5443,      7656.3795),
+    "Min":               (180.5950,       335.9913),
+    "Max":               (1717.6257,      2017.2547),
+    "AVG":               (620.0100,       668.7166),
+    "Std":               (494.4687,       570.8982),
+    "Tot size":          (618.7993,       674.7426),
+    "IAT":               (83_664_475.1353, 83_259_692.0646),
+    "Number":            (9.5159,         4.0009),
+    "Magnitue":          (29.9872,        17.6069),
+    "Radius":            (698.5548,       808.2908),
+    "Covariance":        (641_304.9846,   1_722_217.9847),
+    "Variance":          (0.8626,         0.2336),
+    "Weight":            (141.9544,       103.0460),
+}
+
+# ---------------------------------------------------------------------------
+# "Normal" anchor — real-space feature values obtained by passing a zero
+# vector through the trained CICIoT23 autoencoder and inverse-transforming
+# the reconstruction.  The autoencoder reconstructs these with error ~0.018,
+# well below the anomaly threshold (0.048).
+# ---------------------------------------------------------------------------
+
+_NORMAL_ANCHOR: dict[str, float] = {
+    "flow_duration":     10.38,
+    "Header_Length":     206_134.69,
+    "Protocol Type":     7.90,
+    "Duration":          124.81,
+    "Rate":              2628.35,
+    "Srate":             1684.55,
+    "Drate":             0.01,
+    "fin_flag_number":   0.0004,
+    "syn_flag_number":   0.0,
+    "rst_flag_number":   0.0,
+    "psh_flag_number":   0.011,
+    "ack_flag_number":   0.817,
+    "ece_flag_number":   0.007,
+    "cwr_flag_number":   0.009,
+    "ack_count":         0.0,
+    "syn_count":         0.929,
+    "fin_count":         0.097,
+    "urg_count":         17.62,
+    "rst_count":         267.46,
+    "HTTP":              0.0,
+    "HTTPS":             0.327,
+    "DNS":               0.0,
+    "Telnet":            0.0,
+    "SMTP":              0.0,
+    "SSH":               0.0,
+    "IRC":               0.0,
+    "TCP":               1.0,
+    "UDP":               0.0,
+    "DHCP":              0.0,
+    "ARP":               0.002,
+    "ICMP":              0.0,
+    "IPv":               0.998,
+    "LLC":               0.998,
+    "Tot sum":           2653.04,
+    "Min":               80.67,
+    "Max":               2449.01,
+    "AVG":               513.82,
+    "Std":               844.28,
+    "Tot size":          742.14,
+    "IAT":               24_285_064.0,
+    "Number":            6.63,
+    "Magnitue":          30.18,
+    "Radius":            1183.27,
+    "Covariance":        1_008_068.25,
+    "Variance":          1.003,
+    "Weight":            64.75,
+}
+
+# ---------------------------------------------------------------------------
+# Per-device-type offsets from _NORMAL_ANCHOR, in units of scaler std.
+# Small (|offset| <= 0.08) to stay within autoencoder tolerance.
+# ---------------------------------------------------------------------------
+
+_DEVICE_OFFSETS: dict[str, dict[str, float]] = {
     "temperature_sensor": {
-        "flow_duration": 50.0, "Header_Length": 40.0, "Protocol Type": 6.0,
-        "Duration": 0.05, "Rate": 2.0, "Srate": 1.0, "Drate": 1.0,
-        "fin_flag_number": 1.0, "syn_flag_number": 1.0, "rst_flag_number": 0.0,
-        "psh_flag_number": 1.0, "ack_flag_number": 2.0, "ece_flag_number": 0.0,
-        "cwr_flag_number": 0.0, "ack_count": 4.0, "syn_count": 1.0,
-        "fin_count": 1.0, "urg_count": 0.0, "rst_count": 0.0,
-        "HTTP": 0.0, "HTTPS": 0.0, "DNS": 0.0, "Telnet": 0.0,
-        "SMTP": 0.0, "SSH": 0.0, "IRC": 0.0,
-        "TCP": 1.0, "UDP": 0.0, "DHCP": 0.0, "ARP": 0.0,
-        "ICMP": 0.0, "IPv": 1.0, "LLC": 0.0,
-        "Tot sum": 320.0, "Min": 40.0, "Max": 120.0, "AVG": 64.0, "Std": 20.0,
-        "Tot size": 320.0, "IAT": 25.0, "Number": 5.0, "Magnitue": 143.0,
-        "Radius": 28.0, "Covariance": 400.0, "Variance": 400.0, "Weight": 5.0,
+        "flow_duration": 0.02, "Duration": 0.01, "Number": -0.02,
+        "Tot sum": -0.02, "Weight": 0.01,
     },
     "smart_plug": {
-        "flow_duration": 30.0, "Header_Length": 40.0, "Protocol Type": 6.0,
-        "Duration": 0.03, "Rate": 3.0, "Srate": 1.5, "Drate": 1.5,
-        "fin_flag_number": 1.0, "syn_flag_number": 1.0, "rst_flag_number": 0.0,
-        "psh_flag_number": 1.0, "ack_flag_number": 3.0, "ece_flag_number": 0.0,
-        "cwr_flag_number": 0.0, "ack_count": 5.0, "syn_count": 1.0,
-        "fin_count": 1.0, "urg_count": 0.0, "rst_count": 0.0,
-        "HTTP": 0.0, "HTTPS": 1.0, "DNS": 0.0, "Telnet": 0.0,
-        "SMTP": 0.0, "SSH": 0.0, "IRC": 0.0,
-        "TCP": 1.0, "UDP": 0.0, "DHCP": 0.0, "ARP": 0.0,
-        "ICMP": 0.0, "IPv": 1.0, "LLC": 0.0,
-        "Tot sum": 400.0, "Min": 40.0, "Max": 150.0, "AVG": 80.0, "Std": 25.0,
-        "Tot size": 400.0, "IAT": 15.0, "Number": 6.0, "Magnitue": 196.0,
-        "Radius": 35.0, "Covariance": 625.0, "Variance": 625.0, "Weight": 6.0,
+        "flow_duration": -0.01, "Duration": -0.01, "Rate": 0.01,
+        "Tot sum": 0.02, "Number": 0.02, "Weight": -0.01,
     },
     "ip_camera": {
-        "flow_duration": 5000.0, "Header_Length": 40.0, "Protocol Type": 17.0,
-        "Duration": 5.0, "Rate": 200.0, "Srate": 100.0, "Drate": 100.0,
-        "fin_flag_number": 0.0, "syn_flag_number": 0.0, "rst_flag_number": 0.0,
-        "psh_flag_number": 0.0, "ack_flag_number": 0.0, "ece_flag_number": 0.0,
-        "cwr_flag_number": 0.0, "ack_count": 0.0, "syn_count": 0.0,
-        "fin_count": 0.0, "urg_count": 0.0, "rst_count": 0.0,
-        "HTTP": 0.0, "HTTPS": 0.0, "DNS": 0.0, "Telnet": 0.0,
-        "SMTP": 0.0, "SSH": 0.0, "IRC": 0.0,
-        "TCP": 0.0, "UDP": 1.0, "DHCP": 0.0, "ARP": 0.0,
-        "ICMP": 0.0, "IPv": 1.0, "LLC": 0.0,
-        "Tot sum": 150000.0, "Min": 500.0, "Max": 1400.0, "AVG": 1000.0,
-        "Std": 200.0, "Tot size": 150000.0, "IAT": 5.0, "Number": 150.0,
-        "Magnitue": 12247.0, "Radius": 100.0, "Covariance": 40000.0,
-        "Variance": 40000.0, "Weight": 150.0,
+        "flow_duration": 0.04, "Duration": 0.03, "Rate": 0.02,
+        "Tot sum": 0.04, "Tot size": 0.03, "Number": 0.04,
+        "Header_Length": 0.03,
     },
     "smart_door_lock": {
-        "flow_duration": 20.0, "Header_Length": 40.0, "Protocol Type": 6.0,
-        "Duration": 0.02, "Rate": 5.0, "Srate": 2.5, "Drate": 2.5,
-        "fin_flag_number": 1.0, "syn_flag_number": 1.0, "rst_flag_number": 0.0,
-        "psh_flag_number": 1.0, "ack_flag_number": 3.0, "ece_flag_number": 0.0,
-        "cwr_flag_number": 0.0, "ack_count": 6.0, "syn_count": 1.0,
-        "fin_count": 1.0, "urg_count": 0.0, "rst_count": 0.0,
-        "HTTP": 0.0, "HTTPS": 1.0, "DNS": 0.0, "Telnet": 0.0,
-        "SMTP": 0.0, "SSH": 0.0, "IRC": 0.0,
-        "TCP": 1.0, "UDP": 0.0, "DHCP": 0.0, "ARP": 0.0,
-        "ICMP": 0.0, "IPv": 1.0, "LLC": 0.0,
-        "Tot sum": 256.0, "Min": 40.0, "Max": 100.0, "AVG": 64.0, "Std": 15.0,
-        "Tot size": 256.0, "IAT": 10.0, "Number": 4.0, "Magnitue": 128.0,
-        "Radius": 22.0, "Covariance": 225.0, "Variance": 225.0, "Weight": 4.0,
+        "flow_duration": -0.02, "Duration": -0.01, "Rate": -0.01,
+        "Number": -0.02, "Tot sum": -0.02, "Weight": 0.02,
     },
 }
 
 
+# ---------------------------------------------------------------------------
+# Attack modifiers — shift features by 3-8 scaler std from the anchor
+# to cause high autoencoder reconstruction error.
+# ---------------------------------------------------------------------------
+
 def _apply_syn_flood(features: dict[str, float], rng: random.Random) -> None:
-    features["syn_flag_number"] = rng.uniform(50.0, 200.0)
-    features["syn_count"] = rng.uniform(100.0, 500.0)
-    features["Rate"] = rng.uniform(1000.0, 5000.0)
-    features["Srate"] = rng.uniform(500.0, 2500.0)
-    features["flow_duration"] = rng.uniform(1.0, 10.0)
-    features["Number"] = rng.uniform(200.0, 1000.0)
+    mean, std = _SCALER_STATS["syn_flag_number"]
+    features["syn_flag_number"] = mean + std * rng.uniform(5, 8)
+    mean, std = _SCALER_STATS["syn_count"]
+    features["syn_count"] = mean + std * rng.uniform(4, 7)
+    mean, std = _SCALER_STATS["Rate"]
+    features["Rate"] = mean + std * rng.uniform(3, 6)
+    mean, std = _SCALER_STATS["Srate"]
+    features["Srate"] = mean + std * rng.uniform(3, 6)
+    mean, std = _SCALER_STATS["Number"]
+    features["Number"] = mean + std * rng.uniform(4, 8)
     features["ack_flag_number"] = 0.0
     features["ack_count"] = 0.0
 
 
 def _apply_port_scan(features: dict[str, float], rng: random.Random) -> None:
-    features["rst_flag_number"] = rng.uniform(20.0, 100.0)
-    features["rst_count"] = rng.uniform(50.0, 200.0)
-    features["syn_flag_number"] = rng.uniform(30.0, 150.0)
-    features["syn_count"] = rng.uniform(30.0, 150.0)
-    features["flow_duration"] = rng.uniform(0.5, 5.0)
-    features["Number"] = rng.uniform(100.0, 500.0)
-    features["Rate"] = rng.uniform(500.0, 3000.0)
+    mean, std = _SCALER_STATS["rst_flag_number"]
+    features["rst_flag_number"] = mean + std * rng.uniform(5, 8)
+    mean, std = _SCALER_STATS["rst_count"]
+    features["rst_count"] = mean + std * rng.uniform(4, 7)
+    mean, std = _SCALER_STATS["syn_flag_number"]
+    features["syn_flag_number"] = mean + std * rng.uniform(4, 7)
+    mean, std = _SCALER_STATS["syn_count"]
+    features["syn_count"] = mean + std * rng.uniform(3, 6)
+    mean, std = _SCALER_STATS["Number"]
+    features["Number"] = mean + std * rng.uniform(3, 6)
+    mean, std = _SCALER_STATS["Rate"]
+    features["Rate"] = mean + std * rng.uniform(3, 5)
     features["fin_count"] = 0.0
 
 
@@ -110,23 +194,47 @@ def _apply_arp_spoofing(features: dict[str, float], rng: random.Random) -> None:
     features["ARP"] = 1.0
     features["TCP"] = 0.0
     features["UDP"] = 0.0
-    features["Header_Length"] = rng.uniform(28.0, 42.0)
-    features["Drate"] = rng.uniform(50.0, 200.0)
-    features["flow_duration"] = rng.uniform(1.0, 5.0)
-    features["Rate"] = rng.uniform(100.0, 500.0)
-    features["Number"] = rng.uniform(50.0, 300.0)
+    mean, std = _SCALER_STATS["Header_Length"]
+    features["Header_Length"] = mean - std * rng.uniform(0.6, 0.75)
+    mean, std = _SCALER_STATS["Drate"]
+    features["Drate"] = mean + std * rng.uniform(5, 8)
+    mean, std = _SCALER_STATS["Rate"]
+    features["Rate"] = mean + std * rng.uniform(3, 5)
+    mean, std = _SCALER_STATS["Number"]
+    features["Number"] = mean + std * rng.uniform(4, 7)
 
 
 def _apply_dns_tunnel(features: dict[str, float], rng: random.Random) -> None:
     features["DNS"] = 1.0
     features["UDP"] = 1.0
     features["TCP"] = 0.0
-    features["Tot size"] = rng.uniform(50000.0, 200000.0)
-    features["Tot sum"] = rng.uniform(50000.0, 200000.0)
-    features["AVG"] = rng.uniform(500.0, 2000.0)
-    features["Max"] = rng.uniform(1000.0, 4000.0)
-    features["flow_duration"] = rng.uniform(1000.0, 10000.0)
-    features["Number"] = rng.uniform(50.0, 300.0)
+    mean, std = _SCALER_STATS["Tot size"]
+    features["Tot size"] = mean + std * rng.uniform(5, 8)
+    mean, std = _SCALER_STATS["Tot sum"]
+    features["Tot sum"] = mean + std * rng.uniform(5, 8)
+    mean, std = _SCALER_STATS["AVG"]
+    features["AVG"] = mean + std * rng.uniform(4, 7)
+    mean, std = _SCALER_STATS["Max"]
+    features["Max"] = mean + std * rng.uniform(3, 6)
+    mean, std = _SCALER_STATS["flow_duration"]
+    features["flow_duration"] = mean + std * rng.uniform(4, 8)
+    mean, std = _SCALER_STATS["Number"]
+    features["Number"] = mean + std * rng.uniform(3, 6)
+
+
+def _apply_ddos(features: dict[str, float], rng: random.Random) -> None:
+    mean, std = _SCALER_STATS["Rate"]
+    features["Rate"] = mean + std * rng.uniform(5, 10)
+    mean, std = _SCALER_STATS["Srate"]
+    features["Srate"] = mean + std * rng.uniform(5, 10)
+    mean, std = _SCALER_STATS["Number"]
+    features["Number"] = mean + std * rng.uniform(5, 10)
+    mean, std = _SCALER_STATS["Tot sum"]
+    features["Tot sum"] = mean + std * rng.uniform(4, 8)
+    mean, std = _SCALER_STATS["Tot size"]
+    features["Tot size"] = mean + std * rng.uniform(4, 8)
+    mean, std = _SCALER_STATS["Header_Length"]
+    features["Header_Length"] = mean + std * rng.uniform(3, 6)
 
 
 _ATTACK_FUNCTIONS = [
@@ -134,6 +242,7 @@ _ATTACK_FUNCTIONS = [
     _apply_port_scan,
     _apply_arp_spoofing,
     _apply_dns_tunnel,
+    _apply_ddos,
 ]
 
 
@@ -147,16 +256,21 @@ class TrafficFeatureGenerator:
         mode: str = "normal",
         attack_type: str | None = None,
     ) -> dict[str, float]:
-        profile = DEVICE_PROFILES.get(device_type, DEVICE_PROFILES["temperature_sensor"])
+        offsets = _DEVICE_OFFSETS.get(
+            device_type, _DEVICE_OFFSETS["temperature_sensor"],
+        )
         features: dict[str, float] = {}
 
         for name in FEATURE_NAMES:
-            base = profile.get(name, 0.0)
+            _mean, std = _SCALER_STATS[name]
+            anchor = _NORMAL_ANCHOR[name]
+            device_offset = offsets.get(name, 0.0)
+
             if name in _PROTOCOL_FEATURES:
-                features[name] = base
+                features[name] = max(0.0, anchor + std * device_offset)
             else:
-                noise = self._rng.gauss(0, abs(base) * 0.08 + 0.01)
-                features[name] = max(0.0, base + noise)
+                noise = self._rng.gauss(0, std * 0.05)
+                features[name] = max(0.0, anchor + std * device_offset + noise)
 
         if mode == "abnormal":
             attack_map = {
@@ -164,6 +278,7 @@ class TrafficFeatureGenerator:
                 "port_scan": _apply_port_scan,
                 "arp_spoofing": _apply_arp_spoofing,
                 "dns_tunnel": _apply_dns_tunnel,
+                "DDoS": _apply_ddos,
             }
             if attack_type and attack_type in attack_map:
                 attack_map[attack_type](features, self._rng)

@@ -98,6 +98,42 @@
             localStorage.setItem(storageKey, nextTheme);
         });
     }
+
+    /* ---------- Live refresh (every 3s) ---------- */
+    const kpiEls = document.querySelectorAll(".kpis .kpi strong");
+
+    const refreshAlerts = async () => {
+        try {
+            const alerts = await fetch("/api/alerts?limit=200").then(r => r.json());
+
+            /* KPIs */
+            if (kpiEls.length >= 4) {
+                kpiEls[0].textContent = alerts.length;
+                kpiEls[1].textContent = alerts.filter(a => a.severity === "critical").length;
+                kpiEls[2].textContent = alerts.filter(a => a.severity === "high").length;
+                kpiEls[3].textContent = alerts.filter(a => a.severity === "medium").length;
+            }
+
+            /* Table */
+            const tbody = document.querySelector("table tbody");
+            if (tbody && alerts.length > 0) {
+                tbody.innerHTML = alerts.map(a => `
+                    <tr>
+                        <td>${a.id}</td>
+                        <td>${a.device_id ? `<a href="/dashboard/devices/${a.device_id}" class="device-link">${a.device_id}</a>` : '--'}</td>
+                        <td><span class="badge alert-type">${a.alert_type}</span></td>
+                        <td><span class="badge risk-${a.severity}">${a.severity}</span></td>
+                        <td>${a.risk_score}</td>
+                        <td><span class="badge source-${a.source}">${a.source}</span></td>
+                        <td>${a.reason}</td>
+                        <td class="nowrap">${new Date(a.created_at).toISOString().slice(0, 16).replace("T", " ")}</td>
+                    </tr>
+                `).join("");
+            }
+        } catch (e) { /* offline */ }
+    };
+
+    setInterval(refreshAlerts, 3000);
 })();
 </script>
 </body>

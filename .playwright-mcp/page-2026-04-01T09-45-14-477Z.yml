@@ -1,0 +1,126 @@
+- main [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - paragraph [ref=e5]: Local diploma prototype
+      - heading "IoT Security Monitoring Platform" [level=1] [ref=e6]
+    - button "Dark mode" [ref=e8] [cursor=pointer]
+  - navigation [ref=e9]:
+    - link "Overview" [ref=e10] [cursor=pointer]:
+      - /url: /
+    - link "Devices" [ref=e11] [cursor=pointer]:
+      - /url: /dashboard/devices
+    - link "Alerts" [ref=e12] [cursor=pointer]:
+      - /url: /dashboard/alerts
+  - generic [ref=e13]:
+    - article [ref=e14]:
+      - paragraph [ref=e15]: Device
+      - strong [ref=e16]: temperature-sensor-001
+    - article [ref=e17]:
+      - paragraph [ref=e18]: Status
+      - strong [ref=e19]: unverified
+    - article [ref=e20]:
+      - paragraph [ref=e21]: Risk
+      - strong [ref=e22]: Critical (85)
+    - article [ref=e23]:
+      - paragraph [ref=e24]: Battery
+      - strong [ref=e25]: 13%
+  - generic [ref=e26]:
+    - article [ref=e27]:
+      - heading "Device Info" [level=2] [ref=e28]
+      - table [ref=e29]:
+        - rowgroup [ref=e30]:
+          - row "Type temperature_sensor" [ref=e31]:
+            - rowheader "Type" [ref=e32]
+            - cell "temperature_sensor" [ref=e33]
+          - row "Firmware 1.0.2" [ref=e34]:
+            - rowheader "Firmware" [ref=e35]
+            - cell "1.0.2" [ref=e36]
+          - row "Last Seen 2026-03-20 10:00:00" [ref=e37]:
+            - rowheader "Last Seen" [ref=e38]
+            - cell "2026-03-20 10:00:00" [ref=e39]
+          - 'row "Main Issue ML model detected anomalous network behavior. Reconstruction error: 5.317992 (threshold: 0.048003). Risk level: Critical." [ref=e40]':
+            - rowheader "Main Issue" [ref=e41]
+            - 'cell "ML model detected anomalous network behavior. Reconstruction error: 5.317992 (threshold: 0.048003). Risk level: Critical." [ref=e42]'
+          - row "Recommendation Verify device identity and approve only if source is trusted." [ref=e43]:
+            - rowheader "Recommendation" [ref=e44]
+            - cell "Verify device identity and approve only if source is trusted." [ref=e45]
+    - complementary [ref=e46]:
+      - article [ref=e47]:
+        - heading "Quick Stats" [level=2] [ref=e48]
+        - list [ref=e49]:
+          - listitem [ref=e50]:
+            - strong [ref=e51]: "Telemetry events:"
+            - text: "2"
+          - listitem [ref=e52]:
+            - strong [ref=e53]: "Alerts:"
+            - text: "4"
+          - listitem [ref=e54]:
+            - strong [ref=e55]: "Risk score:"
+            - text: "85"
+  - generic [ref=e56]:
+    - heading "Recent Alerts" [level=2] [ref=e57]
+    - table [ref=e58]:
+      - rowgroup [ref=e59]:
+        - row "ID Type Severity Risk Source Reason Time" [ref=e60]:
+          - columnheader "ID" [ref=e61]
+          - columnheader "Type" [ref=e62]
+          - columnheader "Severity" [ref=e63]
+          - columnheader "Risk" [ref=e64]
+          - columnheader "Source" [ref=e65]
+          - columnheader "Reason" [ref=e66]
+          - columnheader "Time" [ref=e67]
+      - rowgroup [ref=e68]:
+        - 'row "5 ml_anomaly critical 85 ml_model ML model detected anomalous network behavior. Reconstruction error: 5.317992 (threshold: 0.048003). Risk level: Critical. 2026-04-01 09:44" [ref=e69]':
+          - cell "5" [ref=e70]
+          - cell "ml_anomaly" [ref=e71]
+          - cell "critical" [ref=e72]
+          - cell "85" [ref=e73]
+          - cell "ml_model" [ref=e74]
+          - 'cell "ML model detected anomalous network behavior. Reconstruction error: 5.317992 (threshold: 0.048003). Risk level: Critical." [ref=e75]'
+          - cell "2026-04-01 09:44" [ref=e76]
+        - 'row "4 low_battery medium 30 rule_engine Battery dropped below threshold: 13% < 20%. 2026-04-01 09:44" [ref=e77]':
+          - cell "4" [ref=e78]
+          - cell "low_battery" [ref=e79]
+          - cell "medium" [ref=e80]
+          - cell "30" [ref=e81]
+          - cell "rule_engine" [ref=e82]
+          - 'cell "Battery dropped below threshold: 13% < 20%." [ref=e83]'
+          - cell "2026-04-01 09:44" [ref=e84]
+        - 'row "3 impossible_value high 50 rule_engine Temperature value is out of accepted range: 74.1C (allowed -20.0C..60.0C). 2026-04-01 09:44" [ref=e85]':
+          - cell "3" [ref=e86]
+          - cell "impossible_value" [ref=e87]
+          - cell "high" [ref=e88]
+          - cell "50" [ref=e89]
+          - cell "rule_engine" [ref=e90]
+          - 'cell "Temperature value is out of accepted range: 74.1C (allowed -20.0C..60.0C)." [ref=e91]'
+          - cell "2026-04-01 09:44" [ref=e92]
+        - row "1 unknown_device high 50 rule_engine First-seen device is marked unverified. Review identity before treating as trusted. 2026-04-01 09:44" [ref=e93]:
+          - cell "1" [ref=e94]
+          - cell "unknown_device" [ref=e95]
+          - cell "high" [ref=e96]
+          - cell "50" [ref=e97]
+          - cell "rule_engine" [ref=e98]
+          - cell "First-seen device is marked unverified. Review identity before treating as trusted." [ref=e99]
+          - cell "2026-04-01 09:44" [ref=e100]
+  - generic [ref=e101]:
+    - heading "Recent Telemetry" [level=2] [ref=e102]
+    - table [ref=e103]:
+      - rowgroup [ref=e104]:
+        - row "ID Topic Payload Received" [ref=e105]:
+          - columnheader "ID" [ref=e106]
+          - columnheader "Topic" [ref=e107]
+          - columnheader "Payload" [ref=e108]
+          - columnheader "Received" [ref=e109]
+      - rowgroup [ref=e110]:
+        - 'row "3 iot/devices/temperature_sensor/temperature-sensor-001/telemetry {\"battery\": 13, \"device_id\": \"temperature-sensor-001\", \"device_type\": \"temperature_sensor\", \"firmware_version\": \"1.0.2\", \"mode\": \"abnormal\", \"temperature\": 74.1, \"timestamp\": \"2026-03-20T10:00:00Z\", \"topic\": null} 2026-04-01 09:44:47" [ref=e111]':
+          - cell "3" [ref=e112]
+          - cell "iot/devices/temperature_sensor/temperature-sensor-001/telemetry" [ref=e113]
+          - 'cell "{\"battery\": 13, \"device_id\": \"temperature-sensor-001\", \"device_type\": \"temperature_sensor\", \"firmware_version\": \"1.0.2\", \"mode\": \"abnormal\", \"temperature\": 74.1, \"timestamp\": \"2026-03-20T10:00:00Z\", \"topic\": null}" [ref=e114]':
+            - code [ref=e115]: "{\"battery\": 13, \"device_id\": \"temperature-sensor-001\", \"device_type\": \"temperature_sensor\", \"firmware_version\": \"1.0.2\", \"mode\": \"abnormal\", \"temperature\": 74.1, \"timestamp\": \"2026-03-20T10:00:00Z\", \"topic\": null}"
+          - cell "2026-04-01 09:44:47" [ref=e116]
+        - 'row "1 iot/devices/temperature_sensor/temperature-sensor-001/telemetry {\"battery\": 85, \"device_id\": \"temperature-sensor-001\", \"device_type\": \"temperature_sensor\", \"firmware_version\": \"1.0.2\", \"mode\": \"normal\", \"temperature\": 24.3, \"timestamp\": \"2026-03-20T10:00:00Z\", \"topic\": null} 2026-04-01 09:44:42" [ref=e117]':
+          - cell "1" [ref=e118]
+          - cell "iot/devices/temperature_sensor/temperature-sensor-001/telemetry" [ref=e119]
+          - 'cell "{\"battery\": 85, \"device_id\": \"temperature-sensor-001\", \"device_type\": \"temperature_sensor\", \"firmware_version\": \"1.0.2\", \"mode\": \"normal\", \"temperature\": 24.3, \"timestamp\": \"2026-03-20T10:00:00Z\", \"topic\": null}" [ref=e120]':
+            - code [ref=e121]: "{\"battery\": 85, \"device_id\": \"temperature-sensor-001\", \"device_type\": \"temperature_sensor\", \"firmware_version\": \"1.0.2\", \"mode\": \"normal\", \"temperature\": 24.3, \"timestamp\": \"2026-03-20T10:00:00Z\", \"topic\": null}"
+          - cell "2026-04-01 09:44:42" [ref=e122]
