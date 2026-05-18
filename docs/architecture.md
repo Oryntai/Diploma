@@ -1,157 +1,71 @@
-# Архитектура проекта
+# Architecture
 
-Документ переводит `Todo.md` в практичную архитектуру, которую легко реализовать и объяснить на защите.
-
-## Цели архитектуры
-
-- локальный запуск на одном ноутбуке;
-- понятность для студентов;
-- модульность без переусложнения;
-- объяснимые алерты и решения.
-
-## Контекст системы
-
-Базовый поток данных:
+## System Overview
 
 ```text
-simulator -> MQTT broker -> FastAPI backend -> SQLite -> dashboard
+PySide6 Desktop App
+  -> managed FastAPI backend
+  -> SQLite static device registry
+  -> network sample endpoint
+  -> CICIoT feature adapter
+  -> PyTorch autoencoder runtime
+  -> in-memory session alerts
+  -> reports and diagnostics
 ```
 
-Роли компонентов:
+## Desktop Application
 
-- `simulator` генерирует телеметрию устройств;
-- `Mosquitto` доставляет сообщения по MQTT;
-- `backend` валидирует, анализирует и сохраняет данные;
-- `SQLite` хранит состояние, события и алерты;
-- `dashboard` показывает состояние и риски.
+The desktop app is the primary user interface. It starts and stops the backend automatically, sends simulator traffic, displays ML alerts, and exports report artifacts.
 
-## Компоненты
+Main tabs:
 
-### 1) Simulator
+- `Overview`: backend, DB, and ML status.
+- `Devices`: static registered IoT device metadata.
+- `Simulator`: manual sample sending and demo scenario runner.
+- `Alerts`: filtered ML alerts and selected alert details.
+- `ML Model`: model readiness and self-test.
+- `Reports`: session KPIs, charts, samples, and export.
 
-- минимум 4 профиля устройств;
-- normal/abnormal режимы;
-- детерминированные seed для воспроизводимого демо.
+## Backend
 
-### 2) MQTT broker
+The backend is a local FastAPI engine. It exposes a small stable API for the desktop app:
 
-- локальный Mosquitto;
-- простая маршрутизация сообщений от simulator к backend.
+- health and status;
+- registered devices;
+- ML status;
+- single network sample ingestion;
+- deterministic demo scenario.
+- per-device ML normal/attack tests.
 
-### 3) FastAPI backend
+The backend intentionally avoids writing dynamic session samples and alerts to DB during the prototype phase.
 
-- подписка на топики;
-- валидация payload;
-- upsert устройств;
-- rule-engine и risk scoring;
-- создание алертов;
-- API + HTML страницы.
+## Data Model
 
-### 4) SQLite
-
-- хранение `devices`, `telemetry_events`, `alerts` и связанных сущностей;
-- легкий локальный дебаг.
-
-### 5) Dashboard
-
-- overview;
-- список устройств;
-- список алертов;
-- детальная страница устройства.
-
-### Целевая композиция страницы Overview
-
-Для первого демонстрационного экрана фиксируем структуру (по утвержденному референсу):
-
-1. Header: заголовок + action-кнопки `Export Report` и `Run Scan`.
-2. KPI row: 4 карточки (`Total Devices`, `Active Alerts`, `High/Critical Risk`, `Avg. Security Score`).
-3. Main content row:
-   - слева `Device Overview` (таблица устройств и текущих проблем);
-   - справа `Risk Distribution` (severity bars) + `Recommendations`.
-4. Bottom row:
-   - слева `Recent Security Alerts`;
-   - справа `System Flow` (этапы работы системы).
-
-Это целевой baseline для MVP dashboard. Дополнительные визуальные улучшения допускаются только если не ломают эту иерархию и читаемость.
-
-## Ключевые решения
-
-1. **Monolith first**: один FastAPI-сервис, без microservices.
-2. **Rules before ML**: сначала стабильный rules-only контур.
-3. **SQLite first**: быстрый локальный старт, потом возможна миграция.
-4. **Server-rendered UI**: Jinja2 + Chart.js, без тяжелого frontend.
-
-## Рекомендуемая структура
+SQLite stores static registered devices only. The current demo registry contains five simulated devices:
 
 ```text
-backend/
-  app/
-    api/
-    core/
-    db/
-    models/
-    schemas/
-    services/
-    templates/
-    static/
-    main.py
-  tests/
-
-simulator/
-  devices/
-  scenarios/
-  main.py
+dev-001  Room Temperature Sensor  temperature_sensor
+dev-002  Smart Plug                smart_plug
+dev-003  IP Security Camera        ip_camera
+dev-004  Smart Door Lock           smart_door_lock
+dev-005  Robot Vacuum              robot_vacuum
 ```
 
-## Поток обработки telemetry
+Runtime samples, alerts, and reports are session artifacts.
 
-1. Simulator формирует payload.
-2. Публикация в MQTT topic.
-3. Backend получает сообщение.
-4. Payload валидируется.
-5. Обновляется/создается запись устройства.
-6. Событие сохраняется в БД.
-7. Rule-engine вычисляет срабатывания.
-8. Считается risk score.
-9. Создаются алерты.
-10. Данные отдаются в API/UI.
+## Detection Pipeline
 
-## MQTT topics
+1. A simplified local-network sample is created in the Simulator.
+2. The sample is sent to `/api/network/sample`.
+3. `NetworkFeatureAdapter` maps the sample into 46 CICIoT2023-style features.
+4. `MLRuntime` runs PyTorch autoencoder inference.
+5. If reconstruction error exceeds threshold, the backend returns an ML alert.
+6. The desktop app keeps the alert in memory and updates Alerts/Reports.
 
-- `iot/devices/{device_type}/{device_id}/telemetry`
-- `iot/devices/{device_type}/{device_id}/status`
-- `iot/devices/{device_type}/{device_id}/security`
+## Runtime Artifacts
 
-Правила:
-
-- lowercase сегменты;
-- в topic и payload присутствуют `device_type` и `device_id`;
-- payload self-describing (`device_id`, `device_type`, `timestamp`).
-
-## Политика идентичности устройства
-
-- ожидаемые устройства предрегистрированы;
-- unknown sender сохраняется как событие + алерт;
-- unknown sender не добавляется автоматически в trusted-реестр;
-- mismatch между topic identity и payload identity -> high severity spoofing alert.
-
-## Минимальный набор API
-
-- `GET /health`
-- `GET /api/devices`
-- `GET /api/devices/{device_id}`
-- `GET /api/alerts`
-- `GET /api/alerts/recent`
-- `GET /api/stats/summary`
-- `POST /api/scenarios/start`
-- `POST /api/scenarios/stop`
-
-## Критерий следования архитектуре
-
-Архитектура соблюдается, когда:
-
-- ingest/analysis/API/UI реализованы в одном backend процессе;
-- broker локальный и воспроизводимый;
-- правила изолированы от транспорта и рендеринга;
-- ML остается опциональным слоем;
-- ключевые компоненты объясняются за 1–2 минуты на защите.
+- `logs/desktop_diagnostics.log`: UI actions, API calls, errors.
+- `logs/network_samples.log`: received samples and returned alerts.
+- `reports/*.html`: human-readable session reports.
+- `reports/*.json`: raw evidence.
+- `reports/*.png`: chart images for presentation.

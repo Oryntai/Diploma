@@ -42,6 +42,7 @@ class MQTTSubscriber:
         self._ingest = ingest_callback
         self._client = None
         self._thread: threading.Thread | None = None
+        self.enabled = MQTT_ENABLED
 
     def start(self) -> bool:
         """Start the MQTT subscriber in a background thread.

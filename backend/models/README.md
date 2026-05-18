@@ -10,7 +10,7 @@ Supported file formats by current scaffold:
 
 Default configured path:
 
-- `backend/models/security_model.joblib`
+- `backend/models/best_autoencoder_ciciot23.pt`
 
 Override path with environment variable:
 
@@ -19,5 +19,5 @@ Override path with environment variable:
 Example:
 
 ```bash
-set ML_MODEL_PATH=backend/models/my_trained_model.joblib
+set ML_MODEL_PATH=models/my_trained_model.joblib
 ```

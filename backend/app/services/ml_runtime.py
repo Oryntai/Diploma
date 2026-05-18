@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import pickle
+import threading
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,7 @@ class MLRuntime:
     def __init__(self, model_path: Path) -> None:
         self.model_path = model_path
         self._loaded_model: Any | None = None
+        self._load_lock = threading.Lock()
 
     @property
     def model_format(self) -> str:
@@ -43,15 +45,31 @@ class MLRuntime:
             "threshold": _pick(["threshold_ciciot23.json", "threshold.json"]),
         }
 
-    def get_status(self) -> dict[str, str | bool]:
+    def get_status(self) -> dict[str, str | bool | float | int | None]:
         model_exists = self.model_path.is_file()
         model_loaded = self._loaded_model is not None
         model_format = self.model_format
+        threshold: float | None = None
+        feature_count: int | None = None
 
         ready = model_exists and model_format in {"joblib", "pickle"}
         if model_exists and model_format == "torch_autoencoder":
             bundle = self._bundle_paths()
             ready = all(path.is_file() for path in bundle.values())
+            if bundle["threshold"].is_file():
+                try:
+                    with bundle["threshold"].open("r", encoding="utf-8") as file_obj:
+                        threshold = float(json.load(file_obj)["threshold"])
+                except Exception:
+                    threshold = None
+            if bundle["features"].is_file():
+                try:
+                    with bundle["features"].open("r", encoding="utf-8") as file_obj:
+                        features = json.load(file_obj)
+                    if isinstance(features, list):
+                        feature_count = len(features)
+                except Exception:
+                    feature_count = None
 
         detail = "Model file is missing. Place trained artifact at configured path."
         if model_exists:
@@ -80,6 +98,8 @@ class MLRuntime:
             "model_format": model_format,
             "model_loaded": model_loaded,
             "ready_for_inference": ready,
+            "threshold": threshold,
+            "feature_count": feature_count,
             "detail": detail,
         }
 
@@ -185,49 +205,53 @@ class MLRuntime:
         if self._loaded_model is not None:
             return
 
-        if not self.model_path.is_file():
-            raise FileNotFoundError(
-                f"Trained model file is not found: {self.model_path}"
+        with self._load_lock:
+            if self._loaded_model is not None:
+                return
+
+            if not self.model_path.is_file():
+                raise FileNotFoundError(
+                    f"Trained model file is not found: {self.model_path}"
+                )
+
+            if self.model_format == "joblib":
+                try:
+                    import joblib
+                except ImportError as exc:
+                    raise RuntimeError(
+                        "joblib is not installed. Add joblib to requirements."
+                    ) from exc
+                try:
+                    self._loaded_model = joblib.load(self.model_path)
+                except Exception as exc:  # noqa: BLE001
+                    raise RuntimeError(
+                        f"Failed to load joblib model artifact: {self.model_path}"
+                    ) from exc
+                return
+
+            if self.model_format == "pickle":
+                try:
+                    with self.model_path.open("rb") as model_file:
+                        self._loaded_model = pickle.load(model_file)
+                except Exception as exc:  # noqa: BLE001
+                    raise RuntimeError(
+                        f"Failed to load pickle model artifact: {self.model_path}"
+                    ) from exc
+                return
+
+            if self.model_format == "torch_autoencoder":
+                self._loaded_model = self._load_torch_autoencoder_bundle()
+                return
+
+            if self.model_format == "onnx":
+                raise NotImplementedError(
+                    "ONNX runtime adapter is not configured yet. Use joblib/pickle now "
+                    "or add onnxruntime mapping in ml_runtime.py."
+                )
+
+            raise ValueError(
+                "Unsupported model format. Use .joblib, .pkl, .pickle, .pt/.pth or .onnx."
             )
-
-        if self.model_format == "joblib":
-            try:
-                import joblib
-            except ImportError as exc:
-                raise RuntimeError(
-                    "joblib is not installed. Add joblib to requirements."
-                ) from exc
-            try:
-                self._loaded_model = joblib.load(self.model_path)
-            except Exception as exc:  # noqa: BLE001
-                raise RuntimeError(
-                    f"Failed to load joblib model artifact: {self.model_path}"
-                ) from exc
-            return
-
-        if self.model_format == "pickle":
-            try:
-                with self.model_path.open("rb") as model_file:
-                    self._loaded_model = pickle.load(model_file)
-            except Exception as exc:  # noqa: BLE001
-                raise RuntimeError(
-                    f"Failed to load pickle model artifact: {self.model_path}"
-                ) from exc
-            return
-
-        if self.model_format == "torch_autoencoder":
-            self._loaded_model = self._load_torch_autoencoder_bundle()
-            return
-
-        if self.model_format == "onnx":
-            raise NotImplementedError(
-                "ONNX runtime adapter is not configured yet. Use joblib/pickle now "
-                "or add onnxruntime mapping in ml_runtime.py."
-            )
-
-        raise ValueError(
-            "Unsupported model format. Use .joblib, .pkl, .pickle, .pt/.pth or .onnx."
-        )
 
     @staticmethod
     def _risk_level(error: float, threshold: float) -> str:

@@ -1,156 +1,93 @@
-# Интеллектуальная система мониторинга безопасности IoT
+# IoT Security Monitoring
 
-Дипломный проект — локальный прототип системы мониторинга безопасности IoT-устройств с двухуровневым детектом угроз (правила + ML).
+Desktop prototype for the diploma topic: **Creation of an intelligent system for monitoring the security of IoT devices**.
 
-## Возможности
+The project demonstrates a stable local workflow:
 
-- Симуляция 4 типов IoT-устройств (термометр, розетка, камера, замок)
-- Приём телеметрии по HTTP и MQTT
-- Rule-based детект: 5 сценариев угроз (impossible_value, low_battery, message_flood, firmware_mismatch, unknown_device)
-- ML-детект: PyTorch autoencoder на CICIoT2023 (SYN flood, port scan, ARP spoofing, DNS tunnel, DDoS)
-- Web-dashboard с KPI, таблицами, Chart.js графиками, тёмной темой
-- Экспорт отчётов в JSON
-- Запуск сканирования из UI (кнопка Run Scan)
-- Демо-сценарии для защиты
-
-## Архитектура
-
-```
-simulator → MQTT broker (optional) → FastAPI backend → SQLite → dashboard
-                                          ↓
-                                    Rule Engine + ML Model
-                                          ↓
-                                       Alerts
+```text
+registered IoT device
+  -> simulator network sample
+  -> FastAPI backend
+  -> CICIoT feature adapter
+  -> PyTorch autoencoder
+  -> ML alert
+  -> desktop analytics and exportable report
 ```
 
-## Стек
+## Current Capabilities
 
-- **Backend**: Python 3.11+, FastAPI, SQLAlchemy, Pydantic
-- **ML**: PyTorch (autoencoder), CICIoT2023
-- **DB**: SQLite
-- **UI**: Jinja2, Chart.js, vanilla CSS/JS
-- **Messaging**: MQTT (paho-mqtt, Mosquitto)
-- **Тесты**: pytest, httpx
+- PySide6 desktop application with `Overview`, `Devices`, `Simulator`, `Alerts`, `ML Model`, and `Reports` tabs.
+- Managed local FastAPI backend started automatically by the desktop app.
+- Static registered device database with five simulated IoT devices.
+- Network sample endpoint for local-network IoT traffic simulation.
+- CICIoT2023 feature adapter that maps simplified traffic samples into 46 ML features.
+- PyTorch autoencoder anomaly detection with reconstruction error and threshold.
+- In-memory session alerts only; dynamic samples and alerts are not written to DB.
+- Reports tab with KPIs, severity chart, ML score chart, sample table, and report export.
+- Exported HTML, JSON, and PNG chart artifacts for diploma documentation.
 
-## Быстрый запуск
-
-### 1. Установить зависимости
-
-```bash
-cd backend
-pip install -r requirements.txt
-```
-
-### 2. Запустить backend
-
-```bash
-cd backend
-python -m uvicorn app.main:app --reload
-```
-
-### 3. Открыть dashboard
-
-```
-http://127.0.0.1:8000/
-```
-
-### 4. Отправить нормальную телеметрию
-
-```bash
-python simulator/main.py --once --seed 42 --ingest-url http://127.0.0.1:8000/api/ingest/telemetry
-```
-
-### 5. Запустить сценарии угроз
-
-```bash
-python simulator/scenarios/run_scenario.py --scenario all --ingest-url http://127.0.0.1:8000/api/ingest/telemetry
-```
-
-### 6. Запустить тесты
-
-```bash
-cd backend
-python -m pytest tests/ -v
-```
-
-## Или одной командой (PowerShell)
+## Quick Start
 
 ```powershell
-.\scripts\run_local.ps1
+.\scripts\run_desktop.ps1
 ```
 
-## Типы устройств
+Or run directly:
 
-| Тип | Поля | Аномалии |
-|-----|------|----------|
-| Temperature Sensor | temperature, battery, firmware | 70–80°C, батарея 10–25% |
-| Smart Plug | power_watts, voltage, is_on | 500–2000W, напряжение 180–280V |
-| IP Camera | fps, resolution, bandwidth | fps 1–8, bandwidth 8–15K kbps |
-| Smart Door Lock | lock_state, access_attempts | 10–50 попыток доступа |
-
-## Детектируемые угрозы
-
-### Rule Engine (5 правил)
-1. `impossible_value` — температура вне [-20, 60]°C
-2. `low_battery` — батарея < 20%
-3. `message_flood` — >20 сообщений за 60 сек
-4. `firmware_mismatch` — смена прошивки
-5. `unknown_device` — неизвестное устройство
-
-### ML Model (5 типов атак)
-1. SYN Flood — завалить соединениями
-2. Port Scan — сканирование портов
-3. ARP Spoofing — подмена адреса
-4. DNS Tunnel — скрытый канал
-5. DDoS — массированная атака
-
-## API
-
-| Метод | Endpoint | Описание |
-|-------|----------|----------|
-| GET | `/health` | Health check |
-| GET | `/` | Dashboard overview |
-| GET | `/dashboard/devices` | Список устройств |
-| GET | `/dashboard/alerts` | Список алертов |
-| GET | `/dashboard/devices/{id}` | Детали устройства |
-| POST | `/api/ingest/telemetry` | Приём телеметрии |
-| GET | `/api/devices` | JSON список устройств |
-| GET | `/api/alerts` | JSON список алертов |
-| GET | `/api/stats/summary` | Сводка |
-| GET | `/api/stats/charts` | Данные для графиков |
-| GET | `/api/ml/status` | Статус ML-модели |
-| POST | `/api/ml/predict` | ML-инференс |
-| GET | `/api/export/report` | Экспорт отчёта |
-| POST | `/api/scan/run` | Запуск сканирования |
-
-## Структура проекта
-
-```
-backend/
-  app/
-    main.py              # FastAPI app, routes, rule engine
-    models/              # SQLAlchemy ORM (Device, Alert, TelemetryEvent)
-    services/
-      ml_runtime.py      # ML model loader & inference
-      traffic_features.py # CICIoT2023 feature generator
-      mqtt_subscriber.py # MQTT listener
-    templates/           # Jinja2 HTML pages
-    static/              # CSS
-  tests/                 # pytest tests
-  models/                # ML model artifacts
-
-simulator/
-  devices/               # 4 device type simulators
-  scenarios/             # 5 threat scenarios
-  main.py                # CLI entry point
-
-docs/                    # Architecture, API, threat model, demo script
+```powershell
+python -m desktop_app.main
 ```
 
-## Документация
+The desktop app starts the backend on `127.0.0.1:8000` or the next free port in the configured range.
 
-- [docs/architecture.md](docs/architecture.md) — архитектура
-- [docs/api.md](docs/api.md) — API контракт
-- [docs/threat-model.md](docs/threat-model.md) — модель угроз
-- [docs/demo-script.md](docs/demo-script.md) — сценарий демо
-- [docs/ml-integration.md](docs/ml-integration.md) — ML интеграция
+## Demo Flow
+
+1. Open the desktop app.
+2. Check `Devices`: five registered test devices should be visible.
+3. Open `Simulator`.
+4. Click `Normal preset`, then `Send Network Sample`: no alert should appear.
+5. Click `Attack-like preset`, then `Send Network Sample`: an ML alert should appear.
+6. Click `Run Demo Scenario`: the app sends normal, combined attack, and single-metric attack samples for every registered device.
+7. Open `ML Model` and click `Test ML Model`: each device profile should pass normal+attack inference.
+8. Open `Alerts`: inspect ML alerts and the detail panel.
+9. Open `Reports`: inspect charts and click `Export Session Report`.
+
+## Backend API
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| GET | `/health` | Backend health check |
+| GET | `/api/system/status` | Backend, DB, counts, ML status |
+| GET | `/api/registered-devices` | Static registered device list |
+| GET | `/api/ml/status` | ML model readiness and metadata |
+| POST | `/api/network/sample` | Accept one network sample and return dynamic ML alerts |
+| POST | `/api/demo/scenario` | Run the built-in multi-device demo traffic sequence |
+| POST | `/api/demo/device-tests` | Run normal and attack ML tests for every registered device |
+
+## Runtime Data Policy
+
+- SQLite DB stores static registered device metadata.
+- Dynamic network samples and alerts are kept in memory during the desktop session.
+- `logs/` contains runtime diagnostics and network sample evidence.
+- `reports/` contains generated HTML, JSON, and PNG report artifacts.
+- Logs and reports are ignored by git; `.gitkeep` preserves the empty folders.
+
+## Tests
+
+```powershell
+python -m pytest backend\tests -q
+python -m py_compile desktop_app\main.py desktop_app\api_client.py backend\app\main.py
+```
+
+## Important Paths
+
+```text
+desktop_app/             desktop UI and managed backend runtime
+backend/app/main.py      FastAPI backend and demo API
+backend/app/services/    ML runtime, feature adapter, traffic feature generation
+backend/models/          trained autoencoder and companion artifacts
+backend/tests/           API and smoke tests
+docs/                    diploma support documents
+logs/                    runtime logs, ignored by git
+reports/                 generated reports, ignored by git
+```

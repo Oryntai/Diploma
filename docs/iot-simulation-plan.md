@@ -45,13 +45,14 @@ Stage B (security behavior):
 
 Recommended local control API:
 
-- `POST /api/scenarios/start`
-- `POST /api/scenarios/stop`
+- `POST /api/demo/reset`
+- `POST /api/demo/seed`
+- `POST /api/scan/run`
 
 Scenario payload fields:
 
-- `scenario_name`
-- `device_id` (optional when scenario is global)
+- demo reset/seed are deterministic and require no payload;
+- scan runs the configured scenario set against the current backend base URL.
 - `duration_seconds`
 - `seed`
 - `intensity`

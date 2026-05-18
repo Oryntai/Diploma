@@ -1,126 +1,67 @@
-# Сценарий демонстрации (3–5 минут)
+# Demo Script
 
-Цель: показать ценность системы без лишней сложности, полностью офлайн.
+Goal: show a complete intelligent IoT security monitoring workflow in 3-5 minutes.
 
-## Что должно быть продемонстрировано
+## Pre-Demo Checklist
 
-- мониторинг нескольких IoT-устройств (симулированных);
-- прием telemetry через MQTT;
-- детект подозрительного поведения;
-- сохранение и отображение алертов;
-- понятное объяснение, почему устройство отмечено как рискованное.
+- Start the app with `.\scripts\run_desktop.ps1`.
+- Confirm `Engine: online`, `DB: ready`, and `ML: ready`.
+- Open `Devices` and confirm five simulated devices:
+  `dev-001` temperature sensor, `dev-002` smart plug, `dev-003` IP camera,
+  `dev-004` smart door lock, and `dev-005` robot vacuum.
+- Keep `logs/desktop_diagnostics.log` available as troubleshooting evidence.
 
-Важно: визуальный baseline overview-страницы должен соответствовать утвержденному референсу (KPI + Device Overview + Risk Distribution + Recommendations + Recent Security Alerts + System Flow).
+## Live Sequence
 
-## Условия
+1. **Architecture intro**
+   - Explain the flow: desktop app -> FastAPI backend -> CICIoT feature adapter -> PyTorch autoencoder -> alert -> report.
 
-- запуск на одном ноутбуке;
-- детерминированные сценарии;
-- без зависимости от интернета;
-- команды заранее проверены.
+2. **Normal traffic**
+   - Open `Simulator`.
+   - Click `Normal preset`.
+   - Click `Send Network Sample`.
+   - Expected result: no alert.
 
-## Роли (при желании)
+3. **Attack traffic**
+   - Click `Attack-like preset`.
+   - Click `Send Network Sample`.
+   - Expected result: one ML alert from `ml_autoencoder`.
 
-- Оператор: запускает команды, открывает страницы.
-- Докладчик: объясняет архитектуру и результат.
-- Резерв: следит за логами и помогает при сбое.
+4. **Alert explanation**
+   - Open `Alerts`.
+   - Select the alert.
+   - Explain reconstruction error, threshold, risk level, and the human-readable reason.
 
-## Pre-demo checklist
+5. **Full demo scenario**
+   - Open `Simulator`.
+   - Click `Run Demo Scenario`.
+   - Expected result: normal, combined attack, and single-metric attack samples across all five devices, ML alerts, automatic report update.
 
-- broker стартует;
-- backend стартует;
-- БД инициализируется;
-- seed симулятора фиксирован;
-- dashboard открывается;
-- сценарии известны заранее;
-- есть скриншоты на случай fallback.
+6. **Per-device ML test**
+   - Open `ML Model`.
+   - Click `Test ML Model`.
+   - Expected result: each device profile shows normal=0 alerts and attack>=1 alert.
 
-## Рекомендуемая последовательность
+7. **Report export**
+   - Open `Reports`.
+   - Show KPIs and charts.
+   - Click `Export Session Report`.
+   - Show generated HTML report, JSON evidence, and PNG chart files.
 
-### Шаг 1 — Коротко про архитектуру (20–30 сек)
+## Key Talking Points
 
-Пояснение:
+- The system does not rely on static threshold-only checks for the main demo alert.
+- The ML autoencoder evaluates reconstructed CICIoT-style traffic features.
+- Dynamic test data is not written into DB, which keeps the prototype clean during repeated demos.
+- The exported report is reproducible evidence for the diploma and presentation.
+- The same ML pipeline works for multiple IoT profiles, not just one demo sensor.
+- Single-metric attack presets show what happens when only bandwidth, packet rate, connection count, latency, or packet loss is abnormal.
 
-`simulator -> MQTT -> FastAPI -> SQLite -> dashboard`
+## Recovery Plan
 
-### Шаг 2 — Baseline normal mode (30–45 сек)
+If live actions fail:
 
-- запуск сервисов в normal режиме;
-- показать низкое/нулевое число активных алертов.
-
-### Шаг 3 — Набор устройств (20–30 сек)
-
-Показать страницу устройств и кратко описать 4 профиля.
-
-### Шаг 4 — Сценарий 1: Message Flood (30–40 сек)
-
-- включить flood для одного устройства;
-- показать новый алерт, severity/risk.
-
-### Шаг 5 — Сценарий 2: Unknown/Spoofed device (30–40 сек)
-
-- отправить telemetry от неизвестного `device_id`;
-- показать алерт spoofing/unknown device.
-
-### Шаг 6 — Сценарий 3: Impossible value (30–40 сек)
-
-- сгенерировать невозможное значение;
-- показать device detail + reason алерта.
-
-### Шаг 7 — Объяснить смысл алертов (20–30 сек)
-
-Подчеркнуть поля:
-
-- тип;
-- severity;
-- risk score;
-- понятная текстовая причина.
-
-### Шаг 8 — Финал (15–20 сек)
-
-Сформулировать практическую ценность:
-
-- локальная, объяснимая система;
-- полный путь telemetry -> alert -> visualization;
-- пригодно для дипломной защиты.
-
-## Минимальный набор live-сценариев
-
-1. message flood
-2. unknown/spoofed device
-3. impossible value
-
-Резервные:
-
-- auth failures;
-- firmware mismatch;
-- unstable restart.
-
-## Делать / Не делать
-
-Делать:
-
-- использовать seed;
-- держать dashboard заранее открытым;
-- объяснять не только «что сработало», но и «почему».
-
-Не делать:
-
-- зависеть от интернета;
-- показывать unfinished optional ML как обязательную часть;
-- перегружать защиту множеством экранов и команд.
-
-## План восстановления при сбое
-
-Если live-сценарий сломался:
-
-- показать подготовленные скриншоты;
-- показать API-ответы с алертами;
-- продолжить по нарративу, не уходя в отладку на сцене.
-
-## Критерий готовности демо
-
-- команда укладывается в 5 минут;
-- видно минимум 3 подозрительных сценария;
-- dashboard и device-detail объясняют причины риска;
-- участники знают основные тезисы выступления.
+- Check `desktop_diagnostics.log`.
+- Check `network_samples.log`.
+- Restart the desktop app.
+- Use the exported report or screenshots from the last successful run as fallback evidence.

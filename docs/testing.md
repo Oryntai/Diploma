@@ -1,62 +1,61 @@
 # Руководство по тестированию
 
-Документ определяет, как проверять систему от первого коммита до готовности к защите.
+Документ определяет, как проверять систему до уровня professional desktop prototype.
 
 ## Философия
 
 Тесты должны доказать:
 
-1. система работает end-to-end;
+1. desktop app + local engine работают end-to-end;
 2. сценарии угроз действительно детектируются;
-3. поведение воспроизводимо для демо.
+3. поведение воспроизводимо для демо;
+4. fallback web UI остается рабочим.
 
 ## Обязательные уровни тестов
 
 ### 1) Unit tests
 
-Проверяют изолированно:
-
 - rule-engine;
 - risk scoring;
-- payload validation/parsing.
+- payload validation/parsing;
+- desktop API client;
+- desktop runtime port selection.
 
 ### 2) API tests
 
-Проверяют ключевые endpoints:
+Ключевые endpoints:
 
 - `GET /health`
+- `GET /api/system/status`
+- `POST /api/demo/reset`
+- `POST /api/demo/seed`
+- `POST /api/ingest/telemetry`
 - `GET /api/devices`
 - `GET /api/devices/{device_id}`
 - `GET /api/alerts`
-- `GET /api/alerts/recent`
 - `GET /api/stats/summary`
+- `GET /api/stats/charts`
+- `POST /api/scan/run`
 
 ### 3) Integration tests
 
 Проверяют сквозной путь:
 
-`simulator -> MQTT -> backend -> SQLite -> alert query`
+`desktop/simulator -> backend engine -> SQLite -> alert query`
 
-### 4) Dashboard smoke tests
+### 4) Desktop smoke tests
 
-Проверяют рендер страниц:
+- desktop API client получает health/devices/alerts;
+- backend runtime выбирает свободный порт;
+- Reset + Seed Demo наполняет таблицы;
+- Run Scan создает новые alerts.
+
+### 5) Fallback dashboard smoke tests
 
 - overview;
 - devices;
 - alerts;
 - device detail.
-
-### 5) Visual layout checks (по референс-скринам)
-
-Для страницы overview дополнительно проверяем:
-
-- наличие header с двумя кнопками (`Export Report`, `Run Scan`);
-- наличие 4 KPI-карточек в первой строке;
-- наличие таблицы `Device Overview` с 7 колонками;
-- наличие блока `Risk Distribution` с уровнями `Critical/High/Medium/Low`;
-- наличие блока `Recommendations`;
-- наличие блока `Recent Security Alerts`;
-- наличие блока `System Flow` на 5 шагов.
 
 ## Что обязательно покрыть
 
@@ -67,65 +66,38 @@
 - обязательные поля валидируются;
 - timestamps нормализуются.
 
-### Device upsert
+### Demo controls
 
-- новые устройства создаются;
-- повторные сообщения обновляют `last_seen_at`;
-- firmware сохраняется корректно.
+- reset очищает `devices`, `telemetry_events`, `alerts`;
+- seed создает 4 ожидаемых устройства и воспроизводимый набор событий;
+- scan использует фактический base URL backend, а не hardcoded порт.
 
 ### Правила детекта
-
-Минимум:
 
 - flood;
 - impossible value;
 - unknown/spoofed identity;
-- repeated auth failures;
-- firmware mismatch/outdated.
-
-### Risk scoring
-
-- severity добавляет ожидаемые баллы;
-- итог ограничен 100;
-- normal mode < attack mode по риску.
+- low battery;
+- firmware mismatch/outdated;
+- ML anomaly при доступной модели.
 
 ## Acceptance checklist
 
-- [ ] backend стартует без ручных фиксов
-- [ ] simulator стартует без ручных фиксов
-- [ ] таблицы БД создаются корректно
-- [ ] локальный запуск воспроизводим
-- [ ] минимум 5 сценариев дают ожидаемые алерты
-- [ ] normal mode дает меньше алертов, чем attack mode
-- [ ] dashboard страницы открываются
-- [ ] причины алертов читаемы человеком
-- [ ] overview визуально совпадает с целевым референсом по блокам
-- [ ] severity-бейджи и статусы устройств различимы по цвету
-
-## Матрица сценариев (шаблон)
-
-| Сценарий | Триггер | Ожидаемый алерт | Severity | Доказательство |
-| --- | --- | --- | --- | --- |
-| Flood | очень частая публикация | flood alert | medium/high | API + скриншот |
-| Impossible value | значение вне диапазона | anomaly/value alert | medium | event + alert |
-| Spoofed/unknown | неизвестный `device_id` | spoofing alert | high | logs + API |
-| Auth failures | серия неудачных auth | brute-force alert | high | reason text |
-| Firmware mismatch | неподдерживаемая версия | firmware alert | medium | device detail |
+- [ ] `.\scripts\run_desktop.ps1` запускает desktop app
+- [ ] backend стартует из desktop app без ручных фиксов
+- [ ] desktop показывает backend/DB/ML status
+- [ ] Reset + Seed Demo наполняет устройства и алерты
+- [ ] Run Scan создает ожидаемые алерты
+- [ ] Export Report сохраняет JSON
+- [ ] fallback web-dashboard открывается на выбранном backend-порту
+- [ ] `python -m pytest tests/ -q` проходит
 
 ## Ручной smoke перед демо
 
-1. Поднять broker/backend/simulator.
-2. Проверить `/health`.
-3. Убедиться, что устройства видны.
-4. Запустить normal mode.
-5. Запустить подозрительный сценарий.
-6. Проверить алерт в API и UI.
-
-## Критерий готовности тестирования
-
-Тестирование достаточно для MVP, если:
-
-- есть все обязательные уровни проверок;
-- 5+ сценариев детекта подтверждены;
-- есть доказательства (скриншоты, API ответы, отчеты);
-- результаты воспроизводимы на защите.
+1. Запустить `.\scripts\run_desktop.ps1`.
+2. Нажать `Reset + Seed Demo`.
+3. Проверить вкладки `Overview`, `Devices`, `Alerts`.
+4. Запустить `Run Scan`.
+5. Открыть `Device Detail`.
+6. Экспортировать отчет.
+7. Открыть fallback web UI через меню desktop app.

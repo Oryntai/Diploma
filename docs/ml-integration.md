@@ -1,87 +1,85 @@
-# ML integration scaffold
+# ML Integration
 
-This document describes how to connect a trained model to the current web/backend scaffold.
+## Purpose
 
-## Where to place the trained model
+The ML layer provides anomaly detection for IoT network behavior. It is used to demonstrate an intelligent security monitoring workflow rather than real packet capture.
 
-Default location:
+## Model
 
-- `backend/models/security_model.joblib`
+- Type: PyTorch autoencoder.
+- Feature space: CICIoT2023-style network features.
+- Feature count: 46.
+- Output: reconstruction error.
+- Decision rule: anomaly if reconstruction error is greater than the configured threshold.
 
-Alternative location:
+## Input Sample
 
-- put the file anywhere and set `ML_MODEL_PATH`.
+The desktop simulator sends a compact network sample:
 
-Windows example:
-
-```bash
-set ML_MODEL_PATH=models/my_trained_model.joblib
+```text
+timestamp
+device_id
+protocol
+bytes_per_second
+packets_per_second
+connection_count
+latency_ms
+packet_loss_percent
 ```
 
-PowerShell example:
+## Feature Adapter
 
-```powershell
-$env:ML_MODEL_PATH = "models/my_trained_model.joblib"
+`NetworkFeatureAdapter` converts the compact sample into the trained model feature space.
+
+Mapping behavior:
+
+- normal traffic uses the normal feature generator mode;
+- flood-like traffic uses abnormal DDoS-style generation;
+- high traffic volume uses abnormal traffic-volume generation;
+- high latency or packet loss uses degraded suspicious network generation.
+- single-metric attack presets isolate one abnormal value while keeping the rest normal.
+
+This adapter is a demo bridge between simple UI samples and the trained CICIoT2023 autoencoder.
+
+## Alert Output
+
+When the model detects an anomaly, the backend returns an alert with:
+
+```text
+timestamp
+device_id
+device_name
+severity
+attack_type
+source = ml_autoencoder
+message
+explanation
+reconstruction_error
+threshold
+risk_level
 ```
 
-## Supported formats
+`message` is intentionally short for the UI table. `explanation` contains the full technical reason and ML score details.
 
-- `.joblib`
-- `.pkl` / `.pickle`
-- `.pt` / `.pth` (PyTorch autoencoder bundle)
-- `.onnx` (file readiness now, inference adapter to be added)
+## Device Profiles
 
-### PyTorch bundle layout
+The demo registry contains five simulated IoT profiles:
 
-If you use the CICIoT23 autoencoder, keep these files in one directory:
+- room temperature sensor;
+- smart plug;
+- IP security camera;
+- smart door lock;
+- robot vacuum.
 
-- `best_autoencoder_ciciot23.pt`
-- `scaler_ciciot23.pkl`
-- `features_if_ciciot23.json` (or `features_ciciot23.json`)
-- `threshold_ciciot23.json`
+Each profile can run a normal sample and an attack-like sample through the same ML pipeline.
 
-PowerShell example:
+## Normal And Attack Expectations
 
-```powershell
-$env:ML_MODEL_PATH = "models/best_autoencoder_ciciot23.pt"
-```
+- Normal sample: no alert.
+- Attack-like flood sample: one critical ML alert.
+- Degraded network sample: one ML alert if model score exceeds threshold.
+- Single-metric samples: separate ML alerts for bandwidth-only, packet-rate-only, connection-count-only, latency-only, and packet-loss-only anomalies.
 
-## What is already prepared
+## Runtime Policy
 
-- ML path configuration: `backend/app/core/settings.py`
-- Runtime loader and status logic: `backend/app/services/ml_runtime.py`
-- API schema contracts: `backend/app/schemas/ml.py`
-- API routes:
-  - `GET /api/ml/status`
-  - `POST /api/ml/predict`
-- Dashboard page with ML readiness block: `GET /`
-
-## Integration contract for your teammate
-
-If the model has `predict()` with sklearn-like API, no extra backend changes are needed.
-For PyTorch autoencoder bundle, backend returns anomaly score as `prediction`
-plus optional fields: `label`, `risk_level`, `threshold`.
-
-Expected request:
-
-```json
-{
-  "features": [0.1, 0.2, 0.3]
-}
-```
-
-Expected response:
-
-```json
-{
-  "prediction": 0.0,
-  "model_format": "joblib",
-  "model_path": "D:/Diploma/backend/models/security_model.joblib"
-}
-```
-
-## Notes
-
-- Keep model artifacts versioned by filename, for example `security_model_v1.joblib`.
-- Store training metadata near the artifact (`metrics`, `feature order`, `trained_at`).
-- Do not load untrusted pickle files from unknown sources.
+ML alerts are session-only during the prototype phase. They are exported to logs and reports but not written to the database.

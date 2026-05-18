@@ -33,9 +33,14 @@ Desktop.ini
 
 # Logs
 *.log
+logs/*
+!logs/.gitkeep
+reports/*
+!reports/.gitkeep
 
-# Claude Code local settings
-.claude/settings.local.json
+# Local AI/tooling state
+.claude/
+.playwright-mcp/
 
 # MCP config (contains tokens)
 .mcp.json

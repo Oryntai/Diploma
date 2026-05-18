@@ -151,6 +151,10 @@ _DEVICE_OFFSETS: dict[str, dict[str, float]] = {
         "flow_duration": -0.02, "Duration": -0.01, "Rate": -0.01,
         "Number": -0.02, "Tot sum": -0.02, "Weight": 0.02,
     },
+    "robot_vacuum": {
+        "flow_duration": 0.01, "Duration": 0.02, "Rate": 0.015,
+        "Tot sum": 0.015, "Number": 0.01, "Weight": -0.015,
+    },
 }
 
 

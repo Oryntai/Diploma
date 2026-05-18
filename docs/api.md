@@ -1,6 +1,7 @@
 # API-контракт
 
-Документ фиксирует минимальный backend API для MVP.
+Документ фиксирует backend API для локального engine. Основной пользовательский
+интерфейс — PySide6 desktop app; HTML dashboard остается fallback/debug UI.
 
 Важно: это контракт, а не обещание, что все endpoints уже реализованы.
 
@@ -8,7 +9,7 @@
 
 - API остается небольшим и локальным;
 - ответы JSON простые и прозрачные;
-- приоритет — поддержка dashboard и демо;
+- приоритет — поддержка desktop app, fallback dashboard и демо;
 - причины алертов человеко-читаемые;
 - optional ML не обязателен для API.
 
@@ -21,6 +22,32 @@
 - unknown devices не должны молча считаться trusted.
 
 ## Минимальный набор endpoint-ов
+
+### `GET /api/system/status`
+
+Назначение: единая сводка для header desktop-приложения.
+
+Возвращает:
+
+- `backend_status`
+- `database_url`
+- `database_ready`
+- `mqtt_enabled`
+- `ml_status`
+- `summary`
+
+### `POST /api/demo/reset`
+
+Назначение: очистить локальную SQLite БД от demo-данных.
+
+Возвращает количество удаленных устройств, telemetry events и alerts.
+
+### `POST /api/demo/seed`
+
+Назначение: загрузить детерминированный demo dataset для desktop-приложения.
+
+Seed создает 4 ожидаемых устройства, baseline telemetry, rule-based alerts и
+ML/anomaly пример, если модель доступна.
 
 ### `POST /api/ingest/telemetry`
 
@@ -120,22 +147,12 @@
 - `alerts_by_severity`
 - `alerts_last_hour`
 
-### `POST /api/scenarios/start`
+### `POST /api/scan/run`
 
-Назначение: запуск сценария симуляции.
+Назначение: запуск набора demo-сценариев угроз против текущего backend.
 
-Пример запроса:
-
-```json
-{
-  "scenario_name": "message_flood",
-  "device_id": "temp-001"
-}
-```
-
-### `POST /api/scenarios/stop`
-
-Назначение: остановка сценария и возврат в normal mode.
+Важно: endpoint строит ingest URL из фактического request base URL, поэтому
+работает и при auto-start desktop на портах `8000-8010`.
 
 ## Правила обработки ошибок
 
@@ -154,10 +171,12 @@
 
 ## Связь API и страниц
 
-- overview -> `GET /api/stats/summary`
+- desktop header -> `GET /api/system/status`
+- overview -> `GET /api/stats/summary`, `GET /api/stats/charts`
 - devices -> `GET /api/devices`
 - alerts -> `GET /api/alerts`
 - device detail -> `GET /api/devices/{device_id}`
+- demo controls -> `POST /api/demo/reset`, `POST /api/demo/seed`, `POST /api/scan/run`
 
 ## Recommendations по алертам
 
@@ -177,6 +196,6 @@
 
 - реализован минимальный набор endpoint-ов;
 - есть ключевые поля в ответах;
-- dashboard рендерится на этих данных;
+- desktop app и fallback dashboard рендерятся на этих данных;
 - тесты покрывают критические маршруты;
 - документация не расходится с реальным поведением.
