@@ -13,6 +13,16 @@ Goal: show a complete intelligent IoT security monitoring workflow in 3-5 minute
 
 ## Live Sequence
 
+### Fast path
+
+1. Open `Overview`.
+2. Click `Prepare Defense Demo`.
+3. Wait until the result panel shows `Defense demo ready`.
+4. Show readiness checks, generated report paths, `Reports`, and `Alerts`.
+5. In `Reports`, use `Export Evidence Pack` if a single archive is needed for submission or backup.
+
+This path clears the current session, runs the multi-device scenario, generates ML alerts, and saves report artifacts without opening the browser.
+
 1. **Architecture intro**
    - Explain the flow: desktop app -> FastAPI backend -> CICIoT feature adapter -> PyTorch autoencoder -> alert -> report.
 
@@ -47,6 +57,7 @@ Goal: show a complete intelligent IoT security monitoring workflow in 3-5 minute
    - Show KPIs and charts.
    - Click `Export Session Report`.
    - Show generated HTML report, JSON evidence, and PNG chart files.
+   - Click `Export Evidence Pack` to collect report artifacts, logs, and documentation into one ZIP archive.
 
 ## Key Talking Points
 

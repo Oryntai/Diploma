@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import json
 import random
+import zipfile
 from html import escape
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -44,6 +45,9 @@ except ImportError as exc:  # pragma: no cover
 
 APP_TITLE = "IoT Security Monitoring"
 REPORTS_DIR = Path(__file__).resolve().parents[1] / "reports"
+MAX_SESSION_SAMPLES = 500
+MAX_SESSION_ALERTS = 200
+MAX_ACTION_QUEUE = 200
 
 
 class BarChartWidget(QWidget):
@@ -197,12 +201,20 @@ class MainWindow(QMainWindow):
         self.base_url = self.runtime.start()
         self.thread_pool = QThreadPool.globalInstance()
         self._busy = False
+        self._action_queue: list[tuple[str, str, dict[str, Any] | None]] = []
         self._alerts: list[dict[str, Any]] = []
         self._samples: list[dict[str, Any]] = []
         self._visible_alerts: list[dict[str, Any]] = []
         self._last_ml_status: dict[str, Any] = {}
         self._registered_device_ids: list[str] = ["dev-001"]
         self._live_simulator_enabled = False
+        self._live_normal_sent = 0
+        self._live_anomaly_sent = 0
+        self._live_alerts_generated = 0
+        self._live_last_anomaly = "-"
+        self._live_next_anomaly_seconds = 0
+        self._backend_restart_attempts = 0
+        self._defense_demo_running = False
 
         self._build_ui()
         self._build_menu()
@@ -264,12 +276,14 @@ class MainWindow(QMainWindow):
         self.alerts_tab_widget = self._alerts_tab()
         self.ml_model_tab_widget = self._ml_model_tab()
         self.reports_tab_widget = self._reports_tab()
+        self.diagnostics_tab_widget = self._diagnostics_tab()
         self.tabs.addTab(self.overview_tab_widget, "Overview")
         self.tabs.addTab(self.devices_tab_widget, "Devices")
         self.tabs.addTab(self.simulator_tab_widget, "Simulator")
         self.tabs.addTab(self.alerts_tab_widget, "Alerts")
         self.tabs.addTab(self.ml_model_tab_widget, "ML Model")
         self.tabs.addTab(self.reports_tab_widget, "Reports")
+        self.tabs.addTab(self.diagnostics_tab_widget, "Diagnostics")
         layout.addWidget(self.tabs, 1)
 
         self.setCentralWidget(root)
@@ -289,18 +303,39 @@ class MainWindow(QMainWindow):
         counts.addWidget(self.alerts_count, 0, 2)
         splitter.addWidget(metrics_panel)
 
+        demo_panel = QWidget()
+        demo_layout = QVBoxLayout(demo_panel)
+        demo_actions = QHBoxLayout()
+        self.defense_demo_button = QPushButton("Prepare Defense Demo")
+        self.defense_demo_button.clicked.connect(self.run_defense_demo)
+        demo_actions.addWidget(self.defense_demo_button)
+        demo_actions.addStretch()
+        demo_layout.addLayout(demo_actions)
+        self.defense_demo_text = QTextEdit()
+        self.defense_demo_text.setReadOnly(True)
+        self.defense_demo_text.setMinimumHeight(130)
+        self.defense_demo_text.setPlaceholderText("One-click demo result will appear here.")
+        demo_layout.addWidget(self.defense_demo_text, 1)
+        splitter.addWidget(demo_panel)
+
         self.status_text = QTextEdit()
         self.status_text.setReadOnly(True)
         self.status_text.setPlaceholderText(
             "Clean shell is ready. New features will be added here step by step."
         )
+        self.readiness_text = QTextEdit()
+        self.readiness_text.setReadOnly(True)
+        self.readiness_text.setMinimumHeight(170)
+        self.readiness_text.setPlaceholderText("System readiness will appear after refresh.")
         status_panel = QWidget()
         status_layout = QVBoxLayout(status_panel)
         status_layout.setContentsMargins(0, 0, 0, 0)
+        status_layout.addWidget(QLabel("System Readiness"))
+        status_layout.addWidget(self.readiness_text, 1)
         status_layout.addWidget(QLabel("System Status"))
-        status_layout.addWidget(self.status_text, 1)
+        status_layout.addWidget(self.status_text, 2)
         splitter.addWidget(status_panel)
-        splitter.setSizes([180, 520])
+        splitter.setSizes([160, 190, 520])
         layout.addWidget(splitter, 1)
         return tab
 
@@ -339,6 +374,21 @@ class MainWindow(QMainWindow):
         layout.addLayout(form)
 
         presets = QHBoxLayout()
+        self.attack_profile = QComboBox()
+        self.attack_profile.addItems(
+            [
+                "Normal",
+                "Flood",
+                "Bandwidth only",
+                "Packets only",
+                "Connections only",
+                "Latency only",
+                "Packet loss only",
+                "Random anomaly",
+            ]
+        )
+        apply_profile = QPushButton("Apply Profile")
+        apply_profile.clicked.connect(self.apply_selected_attack_profile)
         normal = QPushButton("Normal preset")
         normal.clicked.connect(self.apply_normal_preset)
         attack = QPushButton("Flood attack")
@@ -353,6 +403,9 @@ class MainWindow(QMainWindow):
         latency.clicked.connect(self.apply_latency_only_preset)
         loss = QPushButton("Packet loss only")
         loss.clicked.connect(self.apply_packet_loss_only_preset)
+        presets.addWidget(QLabel("Traffic profile"))
+        presets.addWidget(self.attack_profile)
+        presets.addWidget(apply_profile)
         presets.addWidget(normal)
         presets.addWidget(attack)
         presets.addWidget(bandwidth)
@@ -391,11 +444,19 @@ class MainWindow(QMainWindow):
         self.sample_text.setPlaceholderText("Last network sample payload will appear here.")
         layout.addWidget(QLabel("Last sent payload"))
         layout.addWidget(self.sample_text, 1)
+        self.live_status_text = QTextEdit()
+        self.live_status_text.setReadOnly(True)
+        self.live_status_text.setMinimumHeight(110)
+        self.live_status_text.setPlaceholderText("Live simulator status.")
+        layout.addWidget(QLabel("Live simulator status"))
+        layout.addWidget(self.live_status_text, 1)
         self.live_log_text = QTextEdit()
         self.live_log_text.setReadOnly(True)
+        self.live_log_text.document().setMaximumBlockCount(300)
         self.live_log_text.setPlaceholderText("Live simulator events will appear here.")
         layout.addWidget(QLabel("Live simulator log"))
         layout.addWidget(self.live_log_text, 1)
+        self._render_live_status()
         return tab
 
     def _alerts_tab(self) -> QWidget:
@@ -512,16 +573,71 @@ class MainWindow(QMainWindow):
         actions = QHBoxLayout()
         self.export_report_button = QPushButton("Export Session Report")
         self.export_report_button.clicked.connect(self.export_session_report)
+        self.save_report_button = QPushButton("Save Report Only")
+        self.save_report_button.clicked.connect(self.save_session_report)
+        self.evidence_pack_button = QPushButton("Export Evidence Pack")
+        self.evidence_pack_button.clicked.connect(self.export_evidence_pack)
         actions.addWidget(QLabel("Session Samples"))
         actions.addStretch()
+        actions.addWidget(self.save_report_button)
         actions.addWidget(self.export_report_button)
+        actions.addWidget(self.evidence_pack_button)
         bottom_layout.addLayout(actions)
         self.report_samples_table = QTableWidget()
         bottom_layout.addWidget(self.report_samples_table, 1)
         splitter.addWidget(bottom)
-        splitter.setSizes([360, 300])
+
+        risk_panel = QWidget()
+        risk_layout = QVBoxLayout(risk_panel)
+        risk_layout.addWidget(QLabel("Device Risk Summary"))
+        self.device_risk_table = QTableWidget()
+        risk_layout.addWidget(self.device_risk_table, 1)
+        splitter.addWidget(risk_panel)
+
+        timeline_panel = QWidget()
+        timeline_layout = QVBoxLayout(timeline_panel)
+        timeline_layout.addWidget(QLabel("Alert Timeline"))
+        self.alert_timeline_table = QTableWidget()
+        timeline_layout.addWidget(self.alert_timeline_table, 1)
+        splitter.addWidget(timeline_panel)
+
+        archive_panel = QWidget()
+        archive_layout = QVBoxLayout(archive_panel)
+        archive_actions = QHBoxLayout()
+        refresh_archive = QPushButton("Refresh Report Archive")
+        refresh_archive.clicked.connect(self.refresh_report_archive)
+        archive_actions.addWidget(QLabel("Report Archive"))
+        archive_actions.addStretch()
+        archive_actions.addWidget(refresh_archive)
+        archive_layout.addLayout(archive_actions)
+        self.report_archive_table = QTableWidget()
+        archive_layout.addWidget(self.report_archive_table, 1)
+        splitter.addWidget(archive_panel)
+
+        splitter.setSizes([300, 220, 190, 190, 190])
         layout.addWidget(splitter, 1)
         self._render_reports()
+        self.refresh_report_archive()
+        return tab
+
+    def _diagnostics_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        actions = QHBoxLayout()
+        refresh = QPushButton("Refresh Diagnostics")
+        refresh.clicked.connect(self.refresh_diagnostics_view)
+        open_log = QPushButton("Open Log File")
+        open_log.clicked.connect(self.open_diagnostics_log)
+        actions.addWidget(QLabel(str(LOG_PATH)))
+        actions.addStretch()
+        actions.addWidget(refresh)
+        actions.addWidget(open_log)
+        layout.addLayout(actions)
+        self.diagnostics_text = QTextEdit()
+        self.diagnostics_text.setReadOnly(True)
+        self.diagnostics_text.setPlaceholderText("Diagnostics log tail will appear here.")
+        layout.addWidget(self.diagnostics_text, 1)
+        self.refresh_diagnostics_view()
         return tab
 
     def _double_input(self, minimum: float, maximum: float, value: float) -> QDoubleSpinBox:
@@ -550,12 +666,23 @@ class MainWindow(QMainWindow):
 
     def clear_session(self) -> None:
         log_event("button_clicked", button="Clear Session")
+        self._clear_session_state()
+        self.engine_label.setText("Engine: online (session cleared)")
+
+    def _clear_session_state(self) -> None:
         self._alerts.clear()
         self._samples.clear()
+        self._live_normal_sent = 0
+        self._live_anomaly_sent = 0
+        self._live_alerts_generated = 0
+        self._live_last_anomaly = "-"
         self._render_alerts()
         self._render_reports()
+        self._render_live_status()
         self.sample_text.clear()
-        self.engine_label.setText("Engine: online (session cleared)")
+        if hasattr(self, "live_log_text"):
+            self.live_log_text.clear()
+        self.refresh_diagnostics_view()
 
     def send_network_sample(self) -> None:
         payload = self.current_network_sample()
@@ -567,9 +694,39 @@ class MainWindow(QMainWindow):
         log_event("button_clicked", button="Run Demo Scenario")
         self._run_worker("Run Demo Scenario", "demo_scenario")
 
+    def run_defense_demo(self) -> None:
+        log_event("button_clicked", button="Prepare Defense Demo")
+        self._defense_demo_running = True
+        self._clear_session_state()
+        self.defense_demo_text.setPlainText(
+            "Preparing defense demo...\n"
+            "Session cleared.\n"
+            "Running multi-device scenario."
+        )
+        self._run_worker("Prepare Defense Demo", "demo_scenario")
+
     def test_ml_model(self) -> None:
         log_event("button_clicked", button="Test ML Model")
         self._run_worker("Test ML Model", "ml_test")
+
+    def apply_selected_attack_profile(self) -> None:
+        profile = self.attack_profile.currentText()
+        handlers = {
+            "Normal": self.apply_normal_preset,
+            "Flood": self.apply_attack_preset,
+            "Bandwidth only": self.apply_bandwidth_only_preset,
+            "Packets only": self.apply_packets_only_preset,
+            "Connections only": self.apply_connections_only_preset,
+            "Latency only": self.apply_latency_only_preset,
+            "Packet loss only": self.apply_packet_loss_only_preset,
+        }
+        if profile == "Random anomaly":
+            payload, label = self._random_single_metric_anomaly()
+            self._apply_payload_to_fields(payload)
+            self.sample_text.setPlainText(format_payload(self.current_network_sample()))
+            log_event("simulator_preset_applied", preset=f"random_{label}")
+            return
+        handlers.get(profile, self.apply_normal_preset)()
 
     def apply_normal_preset(self) -> None:
         self.sample_protocol.setCurrentText("HTTP")
@@ -621,6 +778,15 @@ class MainWindow(QMainWindow):
         self.sample_text.setPlainText(format_payload(self.current_network_sample()))
         log_event("simulator_preset_applied", preset="packet_loss_only")
 
+    def _apply_payload_to_fields(self, payload: dict[str, Any]) -> None:
+        self.sample_device_id.setCurrentText(str(payload.get("device_id") or "dev-001"))
+        self.sample_protocol.setCurrentText(str(payload.get("protocol") or "HTTP"))
+        self.sample_bytes.setValue(float(payload.get("bytes_per_second") or 0.0))
+        self.sample_packets.setValue(float(payload.get("packets_per_second") or 0.0))
+        self.sample_connections.setValue(int(payload.get("connection_count") or 0))
+        self.sample_latency.setValue(float(payload.get("latency_ms") or 0.0))
+        self.sample_loss.setValue(float(payload.get("packet_loss_percent") or 0.0))
+
     def current_network_sample(self) -> dict[str, Any]:
         return {
             "timestamp": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -665,14 +831,19 @@ class MainWindow(QMainWindow):
         if not self._live_simulator_enabled:
             return
         payload = self._normal_payload_for_device(self._random_device_id())
+        self._live_normal_sent += 1
         self._append_live_log(f"normal -> {payload['device_id']}")
+        self._render_live_status()
         self._run_worker("Live Device Sample", "send_sample", payload=payload)
 
     def send_live_anomaly_sample(self) -> None:
         if not self._live_simulator_enabled:
             return
         payload, label = self._random_single_metric_anomaly()
+        self._live_anomaly_sent += 1
+        self._live_last_anomaly = label
         self._append_live_log(f"anomaly:{label} -> {payload['device_id']}")
+        self._render_live_status()
         self._run_worker("Live Device Sample", "send_sample", payload=payload)
         self._schedule_next_live_anomaly()
 
@@ -680,7 +851,9 @@ class MainWindow(QMainWindow):
         if not self._live_simulator_enabled:
             return
         delay_ms = random.randint(10_000, 20_000)
+        self._live_next_anomaly_seconds = delay_ms // 1000
         self.live_anomaly_timer.start(delay_ms)
+        self._render_live_status()
         self._append_live_log(f"next anomaly in {delay_ms // 1000}s")
 
     def _random_device_id(self) -> str:
@@ -729,6 +902,66 @@ class MainWindow(QMainWindow):
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.live_log_text.append(f"[{timestamp}] {message}")
 
+    def _render_live_status(self) -> None:
+        if not hasattr(self, "live_status_text"):
+            return
+        queue_size = len(getattr(self, "_action_queue", []))
+        status = "running" if self._live_simulator_enabled else "stopped"
+        lines = [
+            f"Status: {status}",
+            f"Normal samples sent: {self._live_normal_sent}",
+            f"Anomaly samples sent: {self._live_anomaly_sent}",
+            f"Alerts generated: {self._live_alerts_generated}",
+            f"Last anomaly: {self._live_last_anomaly}",
+            f"Next anomaly in: {self._live_next_anomaly_seconds}s" if self._live_simulator_enabled else "Next anomaly in: -",
+            f"Queued actions: {queue_size}",
+            f"History limits: {MAX_SESSION_SAMPLES} samples / {MAX_SESSION_ALERTS} alerts",
+        ]
+        self.live_status_text.setPlainText("\n".join(lines))
+
+    def _render_simple_table(
+        self,
+        table: QTableWidget,
+        headers: list[str],
+        rows: list[list[Any]],
+        stretch_column: int | None = None,
+    ) -> None:
+        table.setColumnCount(len(headers))
+        table.setRowCount(len(rows))
+        table.setHorizontalHeaderLabels(headers)
+        for row_index, row in enumerate(rows):
+            for column_index, value in enumerate(row):
+                cell = QTableWidgetItem(str(value or ""))
+                cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                table.setItem(row_index, column_index, cell)
+        header = table.horizontalHeader()
+        for column in range(len(headers)):
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+        if stretch_column is not None and 0 <= stretch_column < len(headers):
+            header.setSectionResizeMode(stretch_column, QHeaderView.ResizeMode.Stretch)
+
+    def _device_risk_rows(self) -> list[list[Any]]:
+        device_ids = sorted(
+            set(self._registered_device_ids)
+            | {str(sample.get("device_id")) for sample in self._samples if sample.get("device_id")}
+            | {str(alert.get("device_id")) for alert in self._alerts if alert.get("device_id")}
+        )
+        rows: list[list[Any]] = []
+        for device_id in device_ids:
+            sample_count = sum(1 for sample in self._samples if sample.get("device_id") == device_id)
+            alerts = [alert for alert in self._alerts if alert.get("device_id") == device_id]
+            max_score = max(
+                [float(alert.get("reconstruction_error") or 0.0) for alert in alerts]
+                or [0.0]
+            )
+            risk = "Normal"
+            if any(str(alert.get("severity")) == "critical" for alert in alerts):
+                risk = "Critical"
+            elif alerts:
+                risk = "Suspicious"
+            rows.append([device_id, sample_count, len(alerts), self._format_number(max_score), risk])
+        return rows
+
     def _run_worker(
         self,
         name: str,
@@ -736,7 +969,15 @@ class MainWindow(QMainWindow):
         payload: dict[str, Any] | None = None,
     ) -> None:
         if self._busy:
-            log_event("action_rejected", action=name, reason="busy")
+            if name == "Refresh" and any(item[0] == "Refresh" for item in self._action_queue):
+                log_event("action_rejected", action=name, reason="refresh_already_queued")
+                return
+            if len(self._action_queue) >= MAX_ACTION_QUEUE:
+                dropped = self._action_queue.pop(0)
+                log_event("action_queue_dropped", dropped_action=dropped[0])
+            self._action_queue.append((name, action, payload))
+            self._render_live_status()
+            log_event("action_queued", action=name, queue_size=len(self._action_queue))
             return
         self._busy = True
         self._set_action_buttons_enabled(False)
@@ -747,6 +988,14 @@ class MainWindow(QMainWindow):
         worker.signals.failed.connect(self._handle_worker_error)
         self.thread_pool.start(worker)
 
+    def _start_next_queued_action(self) -> None:
+        if self._busy or not self._action_queue:
+            self._render_live_status()
+            return
+        name, action, payload = self._action_queue.pop(0)
+        self._render_live_status()
+        self._run_worker(name, action, payload=payload)
+
     def _handle_worker_result(self, name: str, result: Any) -> None:
         self._busy = False
         self._set_action_buttons_enabled(True)
@@ -756,20 +1005,44 @@ class MainWindow(QMainWindow):
             if name == "Live Device Sample":
                 alerts = result.get("alerts", [])
                 received = result.get("received_sample", {})
+                if alerts:
+                    self._live_alerts_generated += len(alerts)
                 self._append_live_log(
                     f"accepted <- {received.get('device_id')} alerts={len(alerts)}"
                 )
+                self._render_live_status()
             self.engine_label.setText("Engine: online (sample sent)")
+            self._start_next_queued_action()
             return
-        if name == "Run Demo Scenario":
+        if name in {"Run Demo Scenario", "Prepare Defense Demo"}:
             for item in result.get("results", []):
                 self._record_sample_response(item)
-            self.tabs.setCurrentWidget(self.reports_tab_widget)
-            self.engine_label.setText(
-                "Engine: demo completed "
-                f"({result.get('samples_sent', 0)} samples, "
-                f"{result.get('alerts_created', 0)} alerts)"
-            )
+            if name == "Prepare Defense Demo":
+                html_path, json_path, severity_png, score_png = self._write_session_report()
+                self._defense_demo_running = False
+                summary = [
+                    "Defense demo ready.",
+                    "",
+                    f"Samples sent: {result.get('samples_sent', 0)}",
+                    f"ML alerts: {result.get('alerts_created', 0)}",
+                    f"Devices: {len(self._registered_device_ids)}",
+                    "",
+                    f"HTML report: {html_path}",
+                    f"JSON evidence: {json_path}",
+                    f"Severity chart: {severity_png}",
+                    f"ML score chart: {score_png}",
+                ]
+                self.defense_demo_text.setPlainText("\n".join(summary))
+                self.tabs.setCurrentWidget(self.overview_tab_widget)
+                self.engine_label.setText("Engine: defense demo ready")
+            else:
+                self.tabs.setCurrentWidget(self.reports_tab_widget)
+                self.engine_label.setText(
+                    "Engine: demo completed "
+                    f"({result.get('samples_sent', 0)} samples, "
+                    f"{result.get('alerts_created', 0)} alerts)"
+                )
+            self._start_next_queued_action()
             return
         if name == "Test ML Model":
             passed = 0
@@ -803,8 +1076,11 @@ class MainWindow(QMainWindow):
             )
             self.tabs.setCurrentWidget(self.ml_model_tab_widget)
             self.engine_label.setText("Engine: online (ML test completed)")
+            self._start_next_queued_action()
             return
         self._render_status(result["status"], result["devices"])
+        self._backend_restart_attempts = 0
+        self._start_next_queued_action()
 
     def _handle_worker_error(self, name: str, message: str) -> None:
         self._busy = False
@@ -812,6 +1088,9 @@ class MainWindow(QMainWindow):
         self.engine_label.setText(f"Engine: error ({name})")
         self.status_text.setPlainText(message)
         log_event("action_failed", action=name, error=message)
+        if name == "Refresh":
+            self._restart_backend_after_failure(message)
+        self._start_next_queued_action()
 
     def _record_sample_response(self, result: dict[str, Any]) -> None:
         received = result.get("received_sample") or {}
@@ -831,23 +1110,46 @@ class MainWindow(QMainWindow):
                 ),
             },
         )
+        del self._samples[MAX_SESSION_SAMPLES:]
         for alert in alerts:
             self._alerts.insert(0, alert)
+        del self._alerts[MAX_SESSION_ALERTS:]
         self._sync_alert_filters()
         self._render_alerts()
         self._render_reports()
+        self.refresh_diagnostics_view()
 
     def _set_action_buttons_enabled(self, enabled: bool) -> None:
         for button in [
             getattr(self, "refresh_button", None),
             getattr(self, "clear_button", None),
+            getattr(self, "defense_demo_button", None),
             getattr(self, "send_sample_button", None),
             getattr(self, "demo_scenario_button", None),
             getattr(self, "test_ml_button", None),
             getattr(self, "export_report_button", None),
+            getattr(self, "save_report_button", None),
+            getattr(self, "evidence_pack_button", None),
         ]:
             if button is not None:
                 button.setEnabled(enabled)
+
+    def _restart_backend_after_failure(self, reason: str) -> None:
+        if self._backend_restart_attempts >= 2:
+            self.engine_label.setText("Engine: offline")
+            log_event("backend_restart_skipped", reason="max_attempts", error=reason)
+            return
+        self._backend_restart_attempts += 1
+        try:
+            log_event("backend_restart_started", attempt=self._backend_restart_attempts)
+            self.runtime.stop()
+            self.base_url = self.runtime.start()
+            self.base_url_label.setText(self.base_url)
+            self.engine_label.setText("Engine: restarted")
+            log_event("backend_restart_finished", base_url=self.base_url)
+        except Exception as exc:
+            self.engine_label.setText("Engine: offline")
+            log_event("backend_restart_failed", error=str(exc))
 
     def _render_status(
         self,
@@ -884,7 +1186,33 @@ class MainWindow(QMainWindow):
             f"Diagnostics log: {LOG_PATH}",
         ]
         self.status_text.setPlainText("\n".join(lines))
+        self._render_readiness(status, devices)
         self._render_ml_model_status(ml_status)
+
+    def _render_readiness(
+        self,
+        status: dict[str, Any],
+        devices: list[dict[str, Any]],
+    ) -> None:
+        if not hasattr(self, "readiness_text"):
+            return
+        counts = status.get("counts", {})
+        ml_status = status.get("ml_status", {})
+        checks = [
+            ("Backend online", status.get("backend_status") == "ok"),
+            ("Database ready", bool(status.get("database_ready"))),
+            ("ML model ready", bool(ml_status.get("ready_for_inference"))),
+            ("Five devices registered", len(devices) >= 5 and counts.get("registered_devices", 0) >= 5),
+            ("No dynamic DB alerts", counts.get("alerts", 0) == 0),
+            ("No dynamic DB telemetry", counts.get("telemetry_events", 0) == 0),
+            ("Reports directory available", REPORTS_DIR.exists()),
+            ("Diagnostics log path configured", bool(LOG_PATH)),
+        ]
+        passed = sum(1 for _label, ok in checks if ok)
+        lines = [f"Readiness: {passed}/{len(checks)} checks passed", ""]
+        for label, ok in checks:
+            lines.append(f"{'PASS' if ok else 'CHECK'}  {label}")
+        self.readiness_text.setPlainText("\n".join(lines))
 
     def _render_devices(self, devices: list[dict[str, Any]]) -> None:
         headers = [
@@ -1134,6 +1462,29 @@ class MainWindow(QMainWindow):
         ]
         self.report_score_chart.set_points(score_points)
         self._render_samples_table()
+        if hasattr(self, "device_risk_table"):
+            self._render_simple_table(
+                self.device_risk_table,
+                ["Device ID", "Samples", "Alerts", "Max ML Score", "Risk"],
+                self._device_risk_rows(),
+                stretch_column=0,
+            )
+        if hasattr(self, "alert_timeline_table"):
+            rows = [
+                [
+                    alert.get("timestamp"),
+                    alert.get("device_id"),
+                    alert.get("severity"),
+                    alert.get("message"),
+                ]
+                for alert in self._alerts[:50]
+            ]
+            self._render_simple_table(
+                self.alert_timeline_table,
+                ["Timestamp", "Device", "Severity", "Event"],
+                rows,
+                stretch_column=3,
+            )
 
     def _render_samples_table(self) -> None:
         headers = [
@@ -1176,7 +1527,122 @@ class MainWindow(QMainWindow):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
 
+    def refresh_report_archive(self) -> None:
+        if not hasattr(self, "report_archive_table"):
+            return
+        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        files = sorted(
+            [
+                path
+                for path in REPORTS_DIR.glob("*")
+                if path.is_file() and path.suffix.lower() in {".html", ".json", ".png", ".zip"}
+            ],
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )[:40]
+        rows = [
+            [
+                path.name,
+                path.suffix.lower().lstrip("."),
+                self._format_number(path.stat().st_size / 1024),
+                datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+            ]
+            for path in files
+        ]
+        self._render_simple_table(
+            self.report_archive_table,
+            ["File", "Type", "KB", "Modified"],
+            rows,
+            stretch_column=0,
+        )
+
+    def save_session_report(self) -> None:
+        html_path, _json_path, _severity_png_path, _score_png_path = self._write_session_report()
+        self.engine_label.setText(f"Report saved: {html_path.name}")
+
     def export_session_report(self) -> None:
+        html_path, _json_path, _severity_png_path, _score_png_path = self._write_session_report()
+        self.engine_label.setText(f"Report exported: {html_path.name}")
+        self._open_local_file(html_path)
+
+    def export_evidence_pack(self) -> None:
+        pack_path = self._write_evidence_pack()
+        self.engine_label.setText(f"Evidence pack exported: {pack_path.name}")
+
+    def _write_evidence_pack(self) -> Path:
+        html_path, json_path, severity_png_path, score_png_path = self._write_session_report()
+        pack_path = REPORTS_DIR / (
+            "iot_security_evidence_pack_"
+            + datetime.now().strftime("%Y%m%d_%H%M%S")
+            + ".zip"
+        )
+        readme = self._build_evidence_readme(
+            html_path,
+            json_path,
+            severity_png_path,
+            score_png_path,
+        )
+        with zipfile.ZipFile(pack_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for path in [html_path, json_path, severity_png_path, score_png_path]:
+                if path.is_file():
+                    archive.write(path, arcname=f"reports/{path.name}")
+            for path in [
+                LOG_PATH,
+                Path(__file__).resolve().parents[1] / "logs" / "network_samples.log",
+            ]:
+                if path.is_file():
+                    archive.write(path, arcname=f"logs/{path.name}")
+            for path in [
+                Path(__file__).resolve().parents[1] / "README.md",
+                Path(__file__).resolve().parents[1] / "docs" / "demo-script.md",
+                Path(__file__).resolve().parents[1] / "docs" / "architecture.md",
+                Path(__file__).resolve().parents[1] / "docs" / "ml-integration.md",
+            ]:
+                if path.is_file():
+                    archive.write(path, arcname=f"docs/{path.name}")
+            archive.writestr("EVIDENCE_PACK_README.txt", readme)
+        log_event("evidence_pack_exported", path=str(pack_path))
+        return pack_path
+
+    def _build_evidence_readme(
+        self,
+        html_path: Path,
+        json_path: Path,
+        severity_png_path: Path,
+        score_png_path: Path,
+    ) -> str:
+        return "\n".join(
+            [
+                "IoT Security Monitoring Evidence Pack",
+                "",
+                f"Generated at: {datetime.now().astimezone().isoformat(timespec='seconds')}",
+                f"Backend URL: {self.base_url}",
+                "",
+                "Session summary:",
+                f"- Samples: {len(self._samples)}",
+                f"- ML alerts: {len(self._alerts)}",
+                f"- Devices: {len(self._registered_device_ids)}",
+                f"- Max ML score: {max([float(a.get('reconstruction_error') or 0.0) for a in self._alerts] or [0.0]):.6f}",
+                "",
+                "Included report artifacts:",
+                f"- reports/{html_path.name}",
+                f"- reports/{json_path.name}",
+                f"- reports/{severity_png_path.name}",
+                f"- reports/{score_png_path.name}",
+                "",
+                "Included logs:",
+                "- logs/desktop_diagnostics.log",
+                "- logs/network_samples.log",
+                "",
+                "Included docs:",
+                "- docs/README.md",
+                "- docs/demo-script.md",
+                "- docs/architecture.md",
+                "- docs/ml-integration.md",
+            ]
+        )
+
+    def _write_session_report(self) -> tuple[Path, Path, Path, Path]:
         REPORTS_DIR.mkdir(parents=True, exist_ok=True)
         stem = (
             "iot_security_session_report_"
@@ -1214,6 +1680,7 @@ class MainWindow(QMainWindow):
             },
             "samples": self._samples,
             "alerts": self._alerts,
+            "device_risk_summary": self._device_risk_rows(),
         }
         json_path.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
@@ -1227,8 +1694,8 @@ class MainWindow(QMainWindow):
             severity_png=str(severity_png_path),
             score_png=str(score_png_path),
         )
-        self.engine_label.setText(f"Report exported: {html_path.name}")
-        self._open_local_file(html_path)
+        self.refresh_report_archive()
+        return html_path, json_path, severity_png_path, score_png_path
 
     def _build_report_html(self, payload: dict[str, Any]) -> str:
         summary = payload["summary"]
@@ -1334,6 +1801,12 @@ class MainWindow(QMainWindow):
 
   <h2>Network Samples</h2>
   {self._samples_html_table()}
+
+  <h2>Device Risk Summary</h2>
+  {self._device_risk_html_table()}
+
+  <h2>Alert Timeline</h2>
+  {self._alert_timeline_html_table()}
 
   <section class="card">
     <h2>Method Notes</h2>
@@ -1474,6 +1947,45 @@ class MainWindow(QMainWindow):
             + "</tbody></table>"
         )
 
+    def _device_risk_html_table(self) -> str:
+        rows = []
+        for device_id, sample_count, alert_count, max_score, risk in self._device_risk_rows():
+            rows.append(
+                "<tr>"
+                f"<td>{escape(str(device_id))}</td>"
+                f"<td>{escape(str(sample_count))}</td>"
+                f"<td>{escape(str(alert_count))}</td>"
+                f"<td>{escape(str(max_score))}</td>"
+                f"<td>{escape(str(risk))}</td>"
+                "</tr>"
+            )
+        return (
+            "<table><thead><tr><th>Device ID</th><th>Samples</th><th>Alerts</th>"
+            "<th>Max ML Score</th><th>Risk</th></tr></thead><tbody>"
+            + "".join(rows)
+            + "</tbody></table>"
+        )
+
+    def _alert_timeline_html_table(self) -> str:
+        if not self._alerts:
+            return '<div class="card muted">No alert timeline in this session.</div>'
+        rows = []
+        for alert in self._alerts[:50]:
+            rows.append(
+                "<tr>"
+                f"<td>{escape(str(alert.get('timestamp') or ''))}</td>"
+                f"<td>{escape(str(alert.get('device_id') or ''))}</td>"
+                f"<td>{escape(str(alert.get('severity') or ''))}</td>"
+                f"<td>{escape(str(alert.get('message') or ''))}</td>"
+                "</tr>"
+            )
+        return (
+            "<table><thead><tr><th>Timestamp</th><th>Device</th><th>Severity</th>"
+            "<th>Event</th></tr></thead><tbody>"
+            + "".join(rows)
+            + "</tbody></table>"
+        )
+
     def _open_local_file(self, path: Path) -> None:
         try:
             from PySide6.QtCore import QUrl
@@ -1482,6 +1994,15 @@ class MainWindow(QMainWindow):
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
         except Exception as exc:
             log_event("open_file_failed", path=str(path), error=str(exc))
+
+    def refresh_diagnostics_view(self) -> None:
+        if not hasattr(self, "diagnostics_text"):
+            return
+        if not LOG_PATH.is_file():
+            self.diagnostics_text.setPlainText("Diagnostics log is not created yet.")
+            return
+        lines = LOG_PATH.read_text(encoding="utf-8", errors="replace").splitlines()
+        self.diagnostics_text.setPlainText("\n".join(lines[-300:]))
 
     @staticmethod
     def _format_number(value: Any) -> str:

@@ -24,7 +24,7 @@ registered IoT device
 - PyTorch autoencoder anomaly detection with reconstruction error and threshold.
 - In-memory session alerts only; dynamic samples and alerts are not written to DB.
 - Reports tab with KPIs, severity chart, ML score chart, sample table, and report export.
-- Exported HTML, JSON, and PNG chart artifacts for diploma documentation.
+- Exported HTML, JSON, PNG chart artifacts, and ZIP evidence pack for diploma documentation.
 
 ## Quick Start
 
@@ -38,7 +38,7 @@ Or run directly:
 python -m desktop_app.main
 ```
 
-The desktop app starts the backend on `127.0.0.1:8000` or the next free port in the configured range.
+The desktop app starts the backend on `127.0.0.1:8000` or the next free port in `8000-8100`.
 
 ## Demo Flow
 
@@ -51,6 +51,20 @@ The desktop app starts the backend on `127.0.0.1:8000` or the next free port in 
 7. Open `ML Model` and click `Test ML Model`: each device profile should pass normal+attack inference.
 8. Open `Alerts`: inspect ML alerts and the detail panel.
 9. Open `Reports`: inspect charts and click `Export Session Report`.
+10. Click `Export Evidence Pack` to create a ZIP with report artifacts, logs, and documentation.
+
+## Final Defense Checklist
+
+Before the diploma defense:
+
+1. Start the app with `.\scripts\run_desktop.ps1`.
+2. Open `Overview` and confirm System Readiness shows all expected `PASS` checks.
+3. Click `Prepare Defense Demo`.
+4. Open `Alerts` and select an alert to show ML explanation.
+5. Open `ML Model` and run `Test ML Model`.
+6. Open `Reports` and confirm KPIs, charts, device risk summary, and timeline are populated.
+7. Click `Export Evidence Pack`.
+8. Keep the generated ZIP from `reports/` as backup evidence.
 
 ## Backend API
 

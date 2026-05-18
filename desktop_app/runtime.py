@@ -15,7 +15,7 @@ def project_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def find_free_port(start: int = 8000, end: int = 8010) -> int:
+def find_free_port(start: int = 8000, end: int = 8100) -> int:
     for port in range(start, end + 1):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
             probe.settimeout(0.2)
