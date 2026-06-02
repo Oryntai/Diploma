@@ -7,7 +7,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
@@ -185,7 +188,14 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="IoT Security Monitoring Backend", lifespan=lifespan)
+app = FastAPI(title="IoT Security Monitoring", lifespan=lifespan)
+app.mount(
+    "/static",
+    StaticFiles(directory=Path(__file__).resolve().parent / "static"),
+    name="static",
+)
+templates = Jinja2Templates(directory=Path(__file__).resolve().parent / "templates")
+session_alerts: list[DynamicAlert] = []
 
 
 def _counts(db: Session) -> CountsResponse:
@@ -195,6 +205,106 @@ def _counts(db: Session) -> CountsResponse:
         telemetry_events=int(db.scalar(select(func.count(TelemetryEvent.id))) or 0),
         alerts=int(db.scalar(select(func.count(Alert.id))) or 0),
     )
+
+
+def _severity_score(severity: str | None) -> int:
+    return {
+        "critical": 95,
+        "high": 80,
+        "medium": 55,
+        "low": 25,
+    }.get((severity or "low").lower(), 25)
+
+
+def _registered_device_cards(db: Session) -> list[dict[str, Any]]:
+    devices = _ensure_registered_demo_devices(db)
+    active_by_device: dict[str, list[DynamicAlert]] = {}
+    for alert in session_alerts:
+        active_by_device.setdefault(alert.device_id, []).append(alert)
+
+    cards: list[dict[str, Any]] = []
+    for device in devices:
+        alerts = active_by_device.get(device.device_id, [])
+        top_alert = max(alerts, key=lambda item: _severity_score(item.severity), default=None)
+        risk_score = _severity_score(top_alert.severity if top_alert else "low")
+        risk_level = (top_alert.risk_level if top_alert else "Low") or "Low"
+        cards.append(
+            {
+                "device_id": device.device_id,
+                "device_name": device.device_name,
+                "device_type": device.device_type,
+                "status": "online",
+                "battery": None,
+                "firmware_version": "simulated",
+                "last_seen_at": datetime.now(UTC),
+                "risk_level": risk_level,
+                "risk_score": risk_score,
+                "main_issue": top_alert.message if top_alert else "No active anomaly",
+                "recommendation": (
+                    "Inspect the latest network sample and isolate the device if traffic persists."
+                    if top_alert
+                    else "Keep monitoring baseline traffic."
+                ),
+            }
+        )
+    return cards
+
+
+def _summary(db: Session) -> dict[str, Any]:
+    devices = _registered_device_cards(db)
+    severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    for alert in session_alerts:
+        severity_counts[alert.severity.lower()] = severity_counts.get(alert.severity.lower(), 0) + 1
+
+    avg_score = 100
+    if devices:
+        avg_score = round(sum(100 - int(device["risk_score"]) for device in devices) / len(devices), 1)
+    return {
+        "total_devices": len(devices),
+        "online_devices": len(devices),
+        "active_alerts": len(session_alerts),
+        "avg_security_score": avg_score,
+        "alerts_by_severity": severity_counts,
+    }
+
+
+def _alert_rows() -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for index, alert in enumerate(reversed(session_alerts), start=1):
+        rows.append(
+            {
+                "id": index,
+                "device_id": alert.device_id,
+                "alert_type": alert.attack_type,
+                "severity": alert.severity,
+                "risk_score": _severity_score(alert.severity),
+                "source": alert.source,
+                "reason": alert.explanation or alert.message,
+                "created_at": alert.timestamp,
+            }
+        )
+    return rows
+
+
+def _risk_explanations(summary: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    labels = {
+        "critical": ("Critical", "90-100", "Immediate isolation may be required."),
+        "high": ("High", "70-89", "Traffic pattern needs operator attention."),
+        "medium": ("Medium", "40-69", "Monitor the device and compare with baseline."),
+        "low": ("Low", "0-39", "No urgent action."),
+    }
+    return {
+        key: {
+            "label": label,
+            "current_count": summary["alerts_by_severity"].get(key, 0),
+            "class_description": description,
+            "score_range": score_range,
+            "why_now": "Current session ML alerts drive this class.",
+            "typical_causes": ["traffic volume spike", "packet rate spike", "connection fan-out", "latency or packet loss anomaly"],
+            "current_reasons": [alert.message for alert in session_alerts if alert.severity == key],
+        }
+        for key, (label, score_range, description) in labels.items()
+    }
 
 
 def _ensure_registered_demo_devices(db: Session) -> list[RegisteredDevice]:
@@ -350,6 +460,7 @@ def _process_network_sample(
     }
     with network_log_path.open("a", encoding="utf-8") as file_obj:
         file_obj.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    session_alerts.extend(alerts)
     return NetworkSampleResponse(status="accepted", received_sample=sample, alerts=alerts)
 
 
@@ -511,12 +622,140 @@ def registered_devices(db: Session = Depends(get_db)) -> list[RegisteredDeviceRe
     ]
 
 
+@app.get("/", response_class=HTMLResponse)
+def dashboard_overview(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    summary = _summary(db)
+    return templates.TemplateResponse(
+        request,
+        "overview.html",
+        {
+            "summary": summary,
+            "devices": _registered_device_cards(db),
+            "ml_status": ml_runtime.get_status(),
+            "model_env_key": "ML_MODEL_PATH",
+            "risk_explanations": _risk_explanations(summary),
+        },
+    )
+
+
+@app.get("/dashboard/devices", response_class=HTMLResponse)
+def dashboard_devices(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "devices.html",
+        {"summary": _summary(db), "devices": _registered_device_cards(db)},
+    )
+
+
+@app.get("/dashboard/devices/{device_id}", response_class=HTMLResponse)
+def dashboard_device_detail(
+    device_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    devices = _registered_device_cards(db)
+    device = next((item for item in devices if item["device_id"] == device_id), None)
+    if device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+    detail = {
+        "device": device,
+        "recent_alerts": [row for row in _alert_rows() if row["device_id"] == device_id],
+        "recent_telemetry": [],
+    }
+    return templates.TemplateResponse(request, "device_detail.html", {"detail": detail})
+
+
+@app.get("/dashboard/alerts", response_class=HTMLResponse)
+def dashboard_alerts(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(request, "alerts.html", {"alerts": _alert_rows()})
+
+
+@app.get("/api/devices")
+def api_devices(
+    limit: int = 100,
+    db: Session = Depends(get_db),
+) -> list[dict[str, Any]]:
+    return _registered_device_cards(db)[:limit]
+
+
+@app.get("/api/devices/{device_id}")
+def api_device(device_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
+    device = next(
+        (item for item in _registered_device_cards(db) if item["device_id"] == device_id),
+        None,
+    )
+    if device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return device
+
+
+@app.get("/api/alerts")
+def api_alerts(limit: int = 200) -> list[dict[str, Any]]:
+    return _alert_rows()[:limit]
+
+
+@app.get("/api/stats/summary")
+def api_summary(db: Session = Depends(get_db)) -> dict[str, Any]:
+    return _summary(db)
+
+
+@app.get("/api/stats/charts")
+def api_charts() -> dict[str, dict[str, int]]:
+    severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    type_counts: dict[str, int] = {}
+    source_counts: dict[str, int] = {}
+    for alert in session_alerts:
+        severity_counts[alert.severity] = severity_counts.get(alert.severity, 0) + 1
+        type_counts[alert.attack_type] = type_counts.get(alert.attack_type, 0) + 1
+        source_counts[alert.source] = source_counts.get(alert.source, 0) + 1
+    return {
+        "alerts_by_severity": severity_counts,
+        "alerts_by_type": type_counts,
+        "alerts_by_source": source_counts,
+    }
+
+
+@app.post("/api/scan/run")
+def scan_run(db: Session = Depends(get_db)) -> dict[str, Any]:
+    result = run_demo_scenario(db)
+    return {
+        "status": result.status,
+        "results": [
+            f"{result.samples_sent} samples processed",
+            f"{result.alerts_created} ML alerts created",
+        ],
+    }
+
+
+@app.get("/api/export/report", response_class=PlainTextResponse)
+def export_report(db: Session = Depends(get_db)) -> PlainTextResponse:
+    summary = _summary(db)
+    lines = [
+        "IoT Security Monitoring Report",
+        f"Generated: {datetime.now(UTC).isoformat()}",
+        f"Devices: {summary['total_devices']}",
+        f"Active alerts: {summary['active_alerts']}",
+        "",
+        "Alerts:",
+    ]
+    lines.extend(
+        f"- {row['created_at'].isoformat()} {row['device_id']} {row['severity']} {row['reason']}"
+        for row in _alert_rows()
+    )
+    return PlainTextResponse(
+        "\n".join(lines),
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=iot-security-report.txt"},
+    )
+
+
 @app.post("/api/data/clear", response_model=ClearDataResponse)
 def clear_data(db: Session = Depends(get_db)) -> ClearDataResponse:
     deleted_alerts = db.execute(delete(Alert)).rowcount or 0
     deleted_telemetry = db.execute(delete(TelemetryEvent)).rowcount or 0
     deleted_devices = db.execute(delete(Device)).rowcount or 0
     db.commit()
+    session_alerts.clear()
     _ensure_registered_demo_devices(db)
     return ClearDataResponse(
         status="cleared",

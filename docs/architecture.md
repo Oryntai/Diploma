@@ -3,45 +3,46 @@
 ## System Overview
 
 ```text
-PySide6 Desktop App
-  -> managed FastAPI backend
+FastAPI web app
   -> SQLite static device registry
   -> network sample endpoint
   -> CICIoT feature adapter
   -> PyTorch autoencoder runtime
   -> in-memory session alerts
-  -> reports and diagnostics
+  -> black minimal web dashboard
 ```
 
-## Desktop Application
+## Web Application
 
-The desktop app is the primary user interface. It starts and stops the backend automatically, sends simulator traffic, displays ML alerts, and exports report artifacts.
+FastAPI is the primary application surface. It serves both JSON API routes and Jinja2 dashboard pages:
 
-Main tabs:
+- `/` - overview with KPIs, registered devices, risk distribution, charts, and ML status.
+- `/dashboard/devices` - device list.
+- `/dashboard/devices/{device_id}` - device detail.
+- `/dashboard/alerts` - current session alerts.
+- `/api/scan/run` - deterministic demo scan for the UI.
+- `/api/export/report` - current session text report.
 
-- `Overview`: backend, DB, and ML status.
-- `Devices`: static registered IoT device metadata.
-- `Simulator`: manual sample sending and demo scenario runner.
-- `Alerts`: filtered ML alerts and selected alert details.
-- `ML Model`: model readiness and self-test.
-- `Reports`: session KPIs, charts, samples, and export.
+Old desktop code has been removed. The web dashboard is the only supported
+operator interface for the current prototype.
 
-## Backend
+## Backend API
 
-The backend is a local FastAPI engine. It exposes a small stable API for the desktop app:
+The API remains local and small:
 
 - health and status;
-- registered devices;
+- registered device metadata;
 - ML status;
 - single network sample ingestion;
-- deterministic demo scenario.
-- per-device ML normal/attack tests.
+- deterministic demo scenario;
+- per-device ML normal/attack tests;
+- dashboard summary, chart, device, and alert data.
 
-The backend intentionally avoids writing dynamic session samples and alerts to DB during the prototype phase.
+Dynamic samples and alerts are intentionally kept in memory for the current backend process. SQLite stores the static registered device registry.
 
 ## Data Model
 
-SQLite stores static registered devices only. The current demo registry contains five simulated devices:
+The demo registry contains five simulated devices:
 
 ```text
 dev-001  Room Temperature Sensor  temperature_sensor
@@ -51,21 +52,15 @@ dev-004  Smart Door Lock           smart_door_lock
 dev-005  Robot Vacuum              robot_vacuum
 ```
 
-Runtime samples, alerts, and reports are session artifacts.
-
 ## Detection Pipeline
 
-1. A simplified local-network sample is created in the Simulator.
-2. The sample is sent to `/api/network/sample`.
-3. `NetworkFeatureAdapter` maps the sample into 46 CICIoT2023-style features.
-4. `MLRuntime` runs PyTorch autoencoder inference.
-5. If reconstruction error exceeds threshold, the backend returns an ML alert.
-6. The desktop app keeps the alert in memory and updates Alerts/Reports.
+1. A network sample is sent to `/api/network/sample`, or the dashboard triggers `/api/scan/run`.
+2. `NetworkFeatureAdapter` maps the sample into 46 CICIoT2023-style features.
+3. `MLRuntime` runs PyTorch autoencoder inference.
+4. If reconstruction error exceeds threshold, FastAPI stores the alert in current session memory.
+5. The dashboard refreshes summary, charts, device risk, and alerts through JSON endpoints.
 
 ## Runtime Artifacts
 
-- `logs/desktop_diagnostics.log`: UI actions, API calls, errors.
 - `logs/network_samples.log`: received samples and returned alerts.
-- `reports/*.html`: human-readable session reports.
-- `reports/*.json`: raw evidence.
-- `reports/*.png`: chart images for presentation.
+- `reports/`: reserved for generated evidence artifacts.

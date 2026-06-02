@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 import importlib
-import json
 import os
-import socket
 import sys
 from pathlib import Path
 
-import httpx
 from fastapi.testclient import TestClient
 
 
@@ -27,7 +24,7 @@ def load_main_module(database_url: str):
     os.environ.pop("ML_MODEL_PATH", None)
 
     for name in list(sys.modules):
-        if name == "app" or name.startswith("app.") or name.startswith("desktop_app."):
+        if name == "app" or name.startswith("app."):
             sys.modules.pop(name, None)
 
     return importlib.import_module("app.main")
@@ -170,6 +167,29 @@ def test_network_sample_endpoint_accepts_payload(tmp_path: Path) -> None:
         "telemetry_events": 0,
         "alerts": 0,
     }
+
+
+def test_fastapi_dashboard_pages_and_scan(tmp_path: Path) -> None:
+    module = load_main_module(sqlite_url(tmp_path / "dashboard.db"))
+    client = TestClient(module.app)
+
+    for path in ("/", "/dashboard/devices", "/dashboard/devices/dev-001", "/dashboard/alerts"):
+        response = client.get(path)
+        assert response.status_code == 200, path
+        assert "IoT Security Monitoring" in response.text
+
+    scan = client.post("/api/scan/run")
+    assert scan.status_code == 200
+    assert scan.json()["status"] == "completed"
+
+    summary = client.get("/api/stats/summary")
+    assert summary.status_code == 200
+    assert summary.json()["total_devices"] == 5
+    assert summary.json()["active_alerts"] >= 30
+
+    alerts = client.get("/api/alerts")
+    assert alerts.status_code == 200
+    assert len(alerts.json()) >= 30
 
 
 def test_single_metric_attack_pipelines(tmp_path: Path) -> None:
@@ -335,121 +355,3 @@ def test_gitignore_keeps_runtime_artifacts_out_of_git() -> None:
     assert "!reports/.gitkeep" in gitignore
     assert (root / "logs" / ".gitkeep").is_file()
     assert (root / "reports" / ".gitkeep").is_file()
-
-
-def test_desktop_api_client_with_mock_transport() -> None:
-    from desktop_app.api_client import ApiClient
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/health":
-            return httpx.Response(200, json={"status": "ok", "service": "backend"})
-        if request.url.path == "/api/system/status":
-            return httpx.Response(
-                200,
-                json={
-                    "backend_status": "ok",
-                    "database_url": "sqlite:///test.db",
-                    "database_ready": True,
-                    "counts": {
-                        "registered_devices": 5,
-                        "runtime_devices": 0,
-                        "telemetry_events": 0,
-                        "alerts": 0,
-                    },
-                    "ml_status": {"ready_for_inference": True},
-                },
-            )
-        if request.url.path == "/api/data/clear":
-            return httpx.Response(
-                200,
-                json={
-                    "status": "cleared",
-                    "deleted_devices": 0,
-                    "deleted_telemetry_events": 0,
-                    "deleted_alerts": 0,
-                    "counts": {
-                        "registered_devices": 5,
-                        "runtime_devices": 0,
-                        "telemetry_events": 0,
-                        "alerts": 0,
-                    },
-                },
-            )
-        if request.url.path == "/api/registered-devices":
-            return httpx.Response(
-                200,
-                json=[
-                    {
-                        "device_id": "dev-001",
-                        "device_name": "Room Temperature Sensor",
-                        "device_type": "temperature_sensor",
-                        "device_mode": "simulated",
-                        "ip_address": None,
-                        "mac_address": None,
-                    }
-                ],
-            )
-        if request.url.path == "/api/network/sample":
-            return httpx.Response(
-                200,
-                json={
-                    "status": "accepted",
-                    "received_sample": json.loads(request.content.decode("utf-8")),
-                    "alerts": [],
-                },
-            )
-        if request.url.path == "/api/demo/scenario":
-            return httpx.Response(
-                200,
-                json={
-                    "status": "completed",
-                    "samples_sent": 35,
-                    "alerts_created": 30,
-                    "results": [],
-                },
-            )
-        if request.url.path == "/api/demo/device-tests":
-            return httpx.Response(
-                200,
-                json={
-                    "status": "completed",
-                    "devices_tested": 5,
-                    "tests_run": 10,
-                    "alerts_created": 5,
-                    "results": [],
-                },
-            )
-        return httpx.Response(404, json={"detail": "not found"})
-
-    client = ApiClient("http://127.0.0.1:8000", transport=httpx.MockTransport(handler))
-    try:
-        assert client.health()["status"] == "ok"
-        assert client.system_status()["counts"]["registered_devices"] == 5
-        assert client.registered_devices()[0]["device_id"] == "dev-001"
-        assert client.send_network_sample(
-            {
-                "timestamp": "2026-05-17T14:30:00+05:00",
-                "device_id": "dev-001",
-                "protocol": "HTTP",
-                "bytes_per_second": 512.0,
-                "packets_per_second": 0.2,
-                "connection_count": 1,
-                "latency_ms": 12.0,
-                "packet_loss_percent": 0.0,
-            }
-        )["status"] == "accepted"
-        assert client.run_demo_scenario()["status"] == "completed"
-        assert client.run_device_tests()["status"] == "completed"
-        assert client.clear_data()["status"] == "cleared"
-    finally:
-        client.close()
-
-
-def test_desktop_runtime_finds_free_port() -> None:
-    from desktop_app.runtime import find_free_port
-
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
-        listener.bind(("127.0.0.1", 0))
-        listener.listen()
-        occupied = listener.getsockname()[1]
-        assert find_free_port(occupied, occupied + 1) == occupied + 1

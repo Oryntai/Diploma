@@ -1,107 +1,143 @@
 # IoT Security Monitoring
 
-Desktop prototype for the diploma topic: **Creation of an intelligent system for monitoring the security of IoT devices**.
+Prototype of an intelligent monitoring platform for Internet of Things devices.
+The project is built for the diploma topic: **Creation of an intelligent system
+for monitoring the security of IoT devices**.
 
-The project demonstrates a stable local workflow:
+The core idea is a hybrid security monitor. Predictable problems are handled by
+deterministic checks and scenario logic, while unknown or complex traffic
+patterns are evaluated by a machine learning anomaly detector.
 
 ```text
 registered IoT device
-  -> simulator network sample
+  -> simulated network sample
   -> FastAPI backend
-  -> CICIoT feature adapter
+  -> deterministic traffic checks
+  -> CICIoT2023 feature adapter
   -> PyTorch autoencoder
-  -> ML alert
-  -> desktop analytics and exportable report
+  -> alert and risk scoring
+  -> web dashboard and report
 ```
 
-## Current Capabilities
+## Project Annotation
 
-- PySide6 desktop application with `Overview`, `Devices`, `Simulator`, `Alerts`, `ML Model`, and `Reports` tabs.
-- Managed local FastAPI backend started automatically by the desktop app.
-- Static registered device database with five simulated IoT devices.
-- Network sample endpoint for local-network IoT traffic simulation.
-- CICIoT2023 feature adapter that maps simplified traffic samples into 46 ML features.
-- PyTorch autoencoder anomaly detection with reconstruction error and threshold.
-- In-memory session alerts only; dynamic samples and alerts are not written to DB.
-- Reports tab with KPIs, severity chart, ML score chart, sample table, and report export.
-- Exported HTML, JSON, PNG chart artifacts, and ZIP evidence pack for diploma documentation.
+IoT deployments usually contain devices that run continuously, communicate with
+external services, and cannot be reliably watched by manual administration or
+hand-written rules alone. This MVP demonstrates a local monitoring platform that
+combines deterministic checks with reconstruction-based anomaly detection.
+
+The prototype uses a FastAPI backend, SQLite device registry, simulated IoT
+traffic, a CICIoT2023-aligned feature adapter, a PyTorch autoencoder, alert/risk
+scoring, and a server-rendered dashboard. The autoencoder consumes 46
+flow-based network features and marks traffic as abnormal when reconstruction
+error exceeds the validation threshold.
+
+The experimental part uses CICIoT2023 as the primary dataset. The autoencoder
+was trained for 50 epochs and compared with an Isolation Forest baseline. Final
+reported results:
+
+| Metric | Value |
+| --- | ---: |
+| Precision | 0.9988 |
+| Recall | 0.9864 |
+| F1-score | 0.9925 |
+
+Current boundary: runtime validation is based on simulated telemetry. Physical
+hardware validation, especially with the Xiaomi Mi Robot Vacuum-Mop P, remains
+future work.
+
+## Current MVP
+
+- FastAPI web application with JSON API endpoints and Jinja2 dashboard pages.
+- Web dashboard for overview, devices, device details, alerts, scan demo, and
+  text report export.
+- Static SQLite registry with five simulated IoT devices.
+- Deterministic sample classification for obvious traffic symptoms.
+- CICIoT2023 feature adapter that maps simplified samples into 46 ML features.
+- PyTorch autoencoder anomaly detection using reconstruction error and a
+  validation threshold.
+- Session-scoped alerts for the active backend process.
+- Runtime network sample evidence in `logs/network_samples.log`.
+
+Old desktop code has been removed. The supported operator interface is the
+FastAPI web dashboard.
 
 ## Quick Start
 
 ```powershell
-.\scripts\run_desktop.ps1
+.\scripts\run_local.ps1
 ```
 
-Or run directly:
+Manual launch:
 
 ```powershell
-python -m desktop_app.main
+python -m pip install -r backend\requirements.txt
+cd backend
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-The desktop app starts the backend on `127.0.0.1:8000` or the next free port in `8000-8100`.
+Open:
+
+```text
+http://127.0.0.1:8000/
+```
 
 ## Demo Flow
 
-1. Open the desktop app.
-2. Check `Devices`: five registered test devices should be visible.
-3. Open `Simulator`.
-4. Click `Normal preset`, then `Send Network Sample`: no alert should appear.
-5. Click `Attack-like preset`, then `Send Network Sample`: an ML alert should appear.
-6. Click `Run Demo Scenario`: the app sends normal, combined attack, and single-metric attack samples for every registered device.
-7. Open `ML Model` and click `Test ML Model`: each device profile should pass normal+attack inference.
-8. Open `Alerts`: inspect ML alerts and the detail panel.
-9. Open `Reports`: inspect charts and click `Export Session Report`.
-10. Click `Export Evidence Pack` to create a ZIP with report artifacts, logs, and documentation.
-
-## Final Defense Checklist
-
-Before the diploma defense:
-
-1. Start the app with `.\scripts\run_desktop.ps1`.
-2. Open `Overview` and confirm System Readiness shows all expected `PASS` checks.
-3. Click `Prepare Defense Demo`.
-4. Open `Alerts` and select an alert to show ML explanation.
-5. Open `ML Model` and run `Test ML Model`.
-6. Open `Reports` and confirm KPIs, charts, device risk summary, and timeline are populated.
-7. Click `Export Evidence Pack`.
-8. Keep the generated ZIP from `reports/` as backup evidence.
+1. Open the dashboard.
+2. Click `Run Scan` to run the built-in multi-device traffic scenario.
+3. Open `Devices` to inspect registered IoT devices and current risk.
+4. Open `Alerts` to inspect ML alerts and explanations.
+5. Click `Export Report` to download a text report for the current session.
 
 ## Backend API
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
+| GET | `/` | Web dashboard overview |
+| GET | `/dashboard/devices` | Device list page |
+| GET | `/dashboard/devices/{device_id}` | Device detail page |
+| GET | `/dashboard/alerts` | Alert list page |
 | GET | `/health` | Backend health check |
 | GET | `/api/system/status` | Backend, DB, counts, ML status |
 | GET | `/api/registered-devices` | Static registered device list |
+| GET | `/api/devices` | Dashboard device cards |
+| GET | `/api/alerts` | Current session alerts |
+| GET | `/api/stats/summary` | Dashboard KPI data |
+| GET | `/api/stats/charts` | Dashboard chart data |
 | GET | `/api/ml/status` | ML model readiness and metadata |
+| GET | `/api/export/report` | Export current session text report |
 | POST | `/api/network/sample` | Accept one network sample and return dynamic ML alerts |
 | POST | `/api/demo/scenario` | Run the built-in multi-device demo traffic sequence |
 | POST | `/api/demo/device-tests` | Run normal and attack ML tests for every registered device |
+| POST | `/api/scan/run` | Run the dashboard scan demo |
+| POST | `/api/data/clear` | Clear runtime DB rows and session alerts |
 
 ## Runtime Data Policy
 
-- SQLite DB stores static registered device metadata.
-- Dynamic network samples and alerts are kept in memory during the desktop session.
+- SQLite stores static registered device metadata.
+- Dynamic alerts are kept in memory during the backend process.
 - `logs/` contains runtime diagnostics and network sample evidence.
-- `reports/` contains generated HTML, JSON, and PNG report artifacts.
+- `reports/` is reserved for generated artifacts.
 - Logs and reports are ignored by git; `.gitkeep` preserves the empty folders.
 
 ## Tests
 
 ```powershell
 python -m pytest backend\tests -q
-python -m py_compile desktop_app\main.py desktop_app\api_client.py backend\app\main.py
+python -m compileall backend simulator
 ```
 
 ## Important Paths
 
 ```text
-desktop_app/             desktop UI and managed backend runtime
-backend/app/main.py      FastAPI backend and demo API
-backend/app/services/    ML runtime, feature adapter, traffic feature generation
-backend/models/          trained autoencoder and companion artifacts
-backend/tests/           API and smoke tests
-docs/                    diploma support documents
-logs/                    runtime logs, ignored by git
-reports/                 generated reports, ignored by git
+backend/app/main.py              FastAPI app, API, dashboard routes
+backend/app/templates/           Server-rendered web pages
+backend/app/static/dashboard.css Web dashboard stylesheet
+backend/app/services/            ML runtime and feature adapter
+backend/models/                  Trained autoencoder and companion artifacts
+backend/tests/                   API and smoke tests
+simulator/                       Simulated device traffic and scenarios
+scripts/run_local.ps1            FastAPI launch script
+docs/                            Architecture, testing, demo, and project notes
 ```

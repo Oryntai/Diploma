@@ -63,7 +63,7 @@
                     <td>{{ alert.risk_score }}</td>
                     <td><span class="badge source-{{ alert.source }}">{{ alert.source }}</span></td>
                     <td>{{ alert.reason }}</td>
-                    <td class="nowrap">{{ alert.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td class="nowrap">{{ alert.created_at.strftime('%d-%m-%Y %H:%M') }}</td>
                 </tr>
                 {% endfor %}
             {% else %}
@@ -101,6 +101,14 @@
 
     /* ---------- Live refresh (every 3s) ---------- */
     const kpiEls = document.querySelectorAll(".kpis .kpi strong");
+    const formatAlertTime = (value) => {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return "--";
+        }
+        const pad = (number) => String(number).padStart(2, "0");
+        return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    };
 
     const refreshAlerts = async () => {
         try {
@@ -126,7 +134,7 @@
                         <td>${a.risk_score}</td>
                         <td><span class="badge source-${a.source}">${a.source}</span></td>
                         <td>${a.reason}</td>
-                        <td class="nowrap">${new Date(a.created_at).toISOString().slice(0, 16).replace("T", " ")}</td>
+                        <td class="nowrap">${formatAlertTime(a.created_at)}</td>
                     </tr>
                 `).join("");
             }

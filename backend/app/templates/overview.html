@@ -17,6 +17,7 @@
         <div class="actions">
             <button type="button" id="btn-export">Export Report</button>
             <button type="button" class="primary" id="btn-scan">Run Scan</button>
+            <span class="scan-status" id="scan-status" role="status" aria-live="polite"></span>
             <button type="button" id="theme-toggle" class="theme-toggle" aria-pressed="false">
                 Dark mode
             </button>
@@ -106,17 +107,9 @@
                 </ul>
             </article>
             <article class="card risk-details-card side-card-compact" id="risk-details-card">
-                <h2>Risk Class Details</h2>
+                <h2>Risk Details</h2>
                 <p class="risk-selected" id="risk-selected-label">Selected class</p>
-                <p class="risk-description" id="risk-class-description"></p>
-                <p class="risk-meta"><strong>Score range:</strong> <span id="risk-score-range"></span></p>
-                <p class="risk-meta"><strong>Why this class is active:</strong> <span id="risk-why-now"></span></p>
-
-                <h3>Typical reasons</h3>
-                <ul id="risk-typical-causes" class="risk-explainer-list"></ul>
-
-                <h3>Current reasons in your data</h3>
-                <ul id="risk-current-reasons" class="risk-explainer-list"></ul>
+                <p class="risk-meta"><span id="risk-score-range"></span> · <span id="risk-why-now"></span></p>
             </article>
         </aside>
     </section>
@@ -172,11 +165,8 @@
     const riskButtons = Array.from(document.querySelectorAll(".risk-item-button"));
     const riskDetailsCard = document.getElementById("risk-details-card");
     const selectedLabel = document.getElementById("risk-selected-label");
-    const classDescription = document.getElementById("risk-class-description");
     const scoreRange = document.getElementById("risk-score-range");
     const whyNow = document.getElementById("risk-why-now");
-    const typicalCauses = document.getElementById("risk-typical-causes");
-    const currentReasons = document.getElementById("risk-current-reasons");
     let activeSeverity = null;
 
     const setButtonsState = (severity) => {
@@ -195,19 +185,6 @@
         }
     };
 
-    const renderList = (targetElement, items, fallbackText) => {
-        if (!targetElement) {
-            return;
-        }
-        targetElement.innerHTML = "";
-        const source = items.length > 0 ? items : [fallbackText];
-        source.forEach((item) => {
-            const li = document.createElement("li");
-            li.textContent = item;
-            targetElement.appendChild(li);
-        });
-    };
-
     const renderRiskDetails = (severity) => {
         const details = riskExplanations[severity];
         if (!details) {
@@ -218,26 +195,13 @@
             selectedLabel.textContent = `${details.label} (${details.current_count})`;
             selectedLabel.className = `risk-selected risk-${severity}`;
         }
-        if (classDescription) {
-            classDescription.textContent = details.class_description;
-        }
         if (scoreRange) {
             scoreRange.textContent = details.score_range;
         }
         if (whyNow) {
-            whyNow.textContent = details.why_now;
+            const reason = (details.current_reasons || [])[0] || details.class_description;
+            whyNow.textContent = reason;
         }
-
-        renderList(
-            typicalCauses,
-            details.typical_causes || [],
-            "No baseline reasons configured for this class."
-        );
-        renderList(
-            currentReasons,
-            details.current_reasons || [],
-            "No active alerts in this severity right now."
-        );
         activeSeverity = severity;
         setButtonsState(severity);
         if (riskDetailsCard) {
@@ -292,8 +256,10 @@
 
     const initCharts = (data) => {
         const severityColors = {
-            critical: "#dc2626", high: "#ea580c", medium: "#f59e0b", low: "#22c55e"
+            critical: "#e5484d", high: "#ff8a3d", medium: "#f5c451", low: "#4fb477"
         };
+        const chartText = "#a7a7a7";
+        const chartGrid = "#242424";
         const sev = data.alerts_by_severity || {};
         chartSeverity = new Chart(document.getElementById("chart-severity"), {
             type: "doughnut",
@@ -301,7 +267,7 @@
                 labels: Object.keys(sev).map(s => s.charAt(0).toUpperCase() + s.slice(1)),
                 datasets: [{ data: Object.values(sev), backgroundColor: Object.keys(sev).map(s => severityColors[s] || "#94a3b8") }]
             },
-            options: { responsive: true, animation: false, plugins: { legend: { position: "bottom" } } }
+            options: { responsive: true, animation: false, plugins: { legend: { position: "bottom", labels: { color: chartText } } } }
         });
 
         const byType = data.alerts_by_type || {};
@@ -309,9 +275,17 @@
             type: "bar",
             data: {
                 labels: Object.keys(byType),
-                datasets: [{ label: "Alerts", data: Object.values(byType), backgroundColor: "#3b82f6" }]
+                datasets: [{ label: "Alerts", data: Object.values(byType), backgroundColor: "#4aa3ff" }]
             },
-            options: { responsive: true, animation: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+            options: {
+                responsive: true,
+                animation: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { ticks: { color: chartText }, grid: { color: chartGrid } },
+                    y: { beginAtZero: true, ticks: { stepSize: 1, color: chartText }, grid: { color: chartGrid } }
+                }
+            }
         });
 
         const bySrc = data.alerts_by_source || {};
@@ -319,14 +293,14 @@
             type: "doughnut",
             data: {
                 labels: Object.keys(bySrc).map(s => s === "rule_engine" ? "Rule Engine" : s === "ml_model" ? "ML Model" : s),
-                datasets: [{ data: Object.values(bySrc), backgroundColor: ["#3b82f6", "#8b5cf6", "#06b6d4", "#f97316"] }]
+                datasets: [{ data: Object.values(bySrc), backgroundColor: ["#9b8cff", "#4aa3ff", "#4fb477", "#f5c451"] }]
             },
-            options: { responsive: true, animation: false, plugins: { legend: { position: "bottom" } } }
+            options: { responsive: true, animation: false, plugins: { legend: { position: "bottom", labels: { color: chartText } } } }
         });
     };
 
     const updateCharts = (data) => {
-        const severityColors = { critical: "#dc2626", high: "#ea580c", medium: "#f59e0b", low: "#22c55e" };
+        const severityColors = { critical: "#e5484d", high: "#ff8a3d", medium: "#f5c451", low: "#4fb477" };
         if (chartSeverity) {
             const sev = data.alerts_by_severity || {};
             chartSeverity.data.labels = Object.keys(sev).map(s => s.charAt(0).toUpperCase() + s.slice(1));
@@ -412,21 +386,30 @@
     }
 
     const btnScan = document.getElementById("btn-scan");
+    const scanStatus = document.getElementById("scan-status");
+    const setScanStatus = (message, state = "") => {
+        if (!scanStatus) {
+            return;
+        }
+        scanStatus.textContent = message;
+        scanStatus.dataset.state = state;
+    };
     if (btnScan) {
         btnScan.addEventListener("click", async () => {
             btnScan.disabled = true;
             btnScan.textContent = "Scanning...";
+            setScanStatus("Running scan...");
             try {
                 const resp = await fetch("/api/scan/run", { method: "POST" });
                 const data = await resp.json();
                 if (resp.ok) {
-                    alert("Scan completed!\n\n" + data.results.join("\n"));
-                    window.location.reload();
+                    setScanStatus(data.results.join(" / "), "ok");
+                    await refreshDashboard();
                 } else {
-                    alert("Scan failed: " + (data.detail || "Unknown error"));
+                    setScanStatus(data.detail || "Scan failed", "error");
                 }
             } catch (err) {
-                alert("Scan error: " + err.message);
+                setScanStatus(`Scan error: ${err.message}`, "error");
             } finally {
                 btnScan.disabled = false;
                 btnScan.textContent = "Run Scan";

@@ -1,7 +1,7 @@
 # API-контракт
 
-Документ фиксирует backend API для локального engine. Основной пользовательский
-интерфейс — PySide6 desktop app; HTML dashboard остается fallback/debug UI.
+Документ фиксирует API для локального FastAPI-приложения. Основной пользовательский
+интерфейс — server-rendered HTML dashboard на FastAPI.
 
 Важно: это контракт, а не обещание, что все endpoints уже реализованы.
 
@@ -9,7 +9,7 @@
 
 - API остается небольшим и локальным;
 - ответы JSON простые и прозрачные;
-- приоритет — поддержка desktop app, fallback dashboard и демо;
+- приоритет — поддержка веб-dashboard, локального API и демо;
 - причины алертов человеко-читаемые;
 - optional ML не обязателен для API.
 
@@ -25,7 +25,7 @@
 
 ### `GET /api/system/status`
 
-Назначение: единая сводка для header desktop-приложения.
+Назначение: единая сводка состояния backend, БД и ML runtime.
 
 Возвращает:
 
@@ -44,7 +44,7 @@
 
 ### `POST /api/demo/seed`
 
-Назначение: загрузить детерминированный demo dataset для desktop-приложения.
+Назначение: загрузить детерминированный demo dataset для локальной демонстрации.
 
 Seed создает 4 ожидаемых устройства, baseline telemetry, rule-based alerts и
 ML/anomaly пример, если модель доступна.
@@ -152,7 +152,7 @@ ML/anomaly пример, если модель доступна.
 Назначение: запуск набора demo-сценариев угроз против текущего backend.
 
 Важно: endpoint строит ingest URL из фактического request base URL, поэтому
-работает и при auto-start desktop на портах `8000-8010`.
+работает при локальном запуске FastAPI.
 
 ## Правила обработки ошибок
 
@@ -171,7 +171,7 @@ ML/anomaly пример, если модель доступна.
 
 ## Связь API и страниц
 
-- desktop header -> `GET /api/system/status`
+- overview header -> `GET /api/system/status`
 - overview -> `GET /api/stats/summary`, `GET /api/stats/charts`
 - devices -> `GET /api/devices`
 - alerts -> `GET /api/alerts`
@@ -196,6 +196,6 @@ ML/anomaly пример, если модель доступна.
 
 - реализован минимальный набор endpoint-ов;
 - есть ключевые поля в ответах;
-- desktop app и fallback dashboard рендерятся на этих данных;
+- web dashboard рендерится на этих данных;
 - тесты покрывают критические маршруты;
 - документация не расходится с реальным поведением.

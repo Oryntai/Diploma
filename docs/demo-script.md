@@ -4,75 +4,48 @@ Goal: show a complete intelligent IoT security monitoring workflow in 3-5 minute
 
 ## Pre-Demo Checklist
 
-- Start the app with `.\scripts\run_desktop.ps1`.
-- Confirm `Engine: online`, `DB: ready`, and `ML: ready`.
-- Open `Devices` and confirm five simulated devices:
-  `dev-001` temperature sensor, `dev-002` smart plug, `dev-003` IP camera,
-  `dev-004` smart door lock, and `dev-005` robot vacuum.
-- Keep `logs/desktop_diagnostics.log` available as troubleshooting evidence.
+- Start the app with `.\scripts\run_local.ps1`.
+- Open `http://127.0.0.1:8000/`.
+- Confirm five simulated devices are visible:
+  `dev-001`, `dev-002`, `dev-003`, `dev-004`, `dev-005`.
+- Confirm ML status is visible in the dashboard.
 
 ## Live Sequence
 
-### Fast path
-
-1. Open `Overview`.
-2. Click `Prepare Defense Demo`.
-3. Wait until the result panel shows `Defense demo ready`.
-4. Show readiness checks, generated report paths, `Reports`, and `Alerts`.
-5. In `Reports`, use `Export Evidence Pack` if a single archive is needed for submission or backup.
-
-This path clears the current session, runs the multi-device scenario, generates ML alerts, and saves report artifacts without opening the browser.
-
 1. **Architecture intro**
-   - Explain the flow: desktop app -> FastAPI backend -> CICIoT feature adapter -> PyTorch autoencoder -> alert -> report.
+   Explain the flow: FastAPI web app -> CICIoT feature adapter -> PyTorch autoencoder -> session alert -> dashboard/report.
 
-2. **Normal traffic**
-   - Open `Simulator`.
-   - Click `Normal preset`.
-   - Click `Send Network Sample`.
-   - Expected result: no alert.
+2. **Baseline screen**
+   Show the black minimal overview: KPIs, device table, risk distribution, and ML readiness.
 
-3. **Attack traffic**
-   - Click `Attack-like preset`.
-   - Click `Send Network Sample`.
-   - Expected result: one ML alert from `ml_autoencoder`.
+3. **Run scan**
+   Click `Run Scan`.
+   Expected result: the built-in multi-device scenario sends 35 samples and creates ML alerts.
 
 4. **Alert explanation**
-   - Open `Alerts`.
-   - Select the alert.
-   - Explain reconstruction error, threshold, risk level, and the human-readable reason.
+   Open `Alerts`.
+   Explain severity, source, reconstruction error, threshold, risk level, and human-readable reason.
 
-5. **Full demo scenario**
-   - Open `Simulator`.
-   - Click `Run Demo Scenario`.
-   - Expected result: normal, combined attack, and single-metric attack samples across all five devices, ML alerts, automatic report update.
+5. **Device detail**
+   Open one device from `Devices`.
+   Show current risk, recommendation, and recent alerts for that device.
 
-6. **Per-device ML test**
-   - Open `ML Model`.
-   - Click `Test ML Model`.
-   - Expected result: each device profile shows normal=0 alerts and attack>=1 alert.
-
-7. **Report export**
-   - Open `Reports`.
-   - Show KPIs and charts.
-   - Click `Export Session Report`.
-   - Show generated HTML report, JSON evidence, and PNG chart files.
-   - Click `Export Evidence Pack` to collect report artifacts, logs, and documentation into one ZIP archive.
+6. **Report export**
+   Click `Export Report`.
+   Show the generated text report for the current session.
 
 ## Key Talking Points
 
-- The system does not rely on static threshold-only checks for the main demo alert.
-- The ML autoencoder evaluates reconstructed CICIoT-style traffic features.
-- Dynamic test data is not written into DB, which keeps the prototype clean during repeated demos.
-- The exported report is reproducible evidence for the diploma and presentation.
-- The same ML pipeline works for multiple IoT profiles, not just one demo sensor.
-- Single-metric attack presets show what happens when only bandwidth, packet rate, connection count, latency, or packet loss is abnormal.
+- The main alert path uses the ML autoencoder, not only static thresholds.
+- The feature adapter maps local network samples into CICIoT-style feature vectors.
+- Dynamic samples and alerts are session-scoped, so repeated demos stay clean.
+- The dashboard is served directly by FastAPI; no desktop client is required or maintained.
 
 ## Recovery Plan
 
 If live actions fail:
 
-- Check `desktop_diagnostics.log`.
-- Check `network_samples.log`.
-- Restart the desktop app.
-- Use the exported report or screenshots from the last successful run as fallback evidence.
+- Check `http://127.0.0.1:8000/health`.
+- Check `logs/network_samples.log`.
+- Restart `.\scripts\run_local.ps1`.
+- Use screenshots or a previous exported report as fallback evidence.

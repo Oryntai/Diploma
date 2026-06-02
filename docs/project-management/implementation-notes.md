@@ -2,23 +2,24 @@
 
 ## Что уже построено
 
-- Backend отвечает на `GET /health`.
-- База данных может создать ядро таблиц в SQLite.
-- Simulator умеет выводить одно телеметрическое сообщение и завершаться (`--once`).
-- PySide6 desktop app является основным интерфейсом оператора.
-- Desktop app сам запускает локальный FastAPI engine на свободном порту.
-- Demo controls доступны через API и UI: reset, seed, scan, export.
+- FastAPI отвечает на `GET /health` и основные API endpoints.
+- FastAPI отдает Jinja2 dashboard как основной пользовательский интерфейс.
+- База данных создает ядро таблиц в SQLite.
+- Зарегистрированы пять демо IoT-устройств.
+- `/api/network/sample`, `/api/demo/scenario` и `/api/scan/run` проходят через CICIoT feature adapter и PyTorch autoencoder.
+- Dashboard показывает overview, devices, device detail, alerts, charts и ML status.
+- Старый desktop-код удален; основной runtime теперь только FastAPI web prototype.
 
 ## Почему это важно
 
-- Можно отдельно проверять части pipeline до полной интеграции.
-- Команда получает ранний рабочий результат.
-- Детерминированный вывод упрощает тесты и демо.
+- Проект запускается как обычное FastAPI web-приложение.
+- Демо не зависит от desktop-клиента.
+- Детерминированный scan упрощает защиту, тесты и скриншоты.
 
-## Что пока не реализовано (следующие улучшения)
+## Что пока можно улучшить
 
-- Windows exe через PyInstaller;
-- полноценные desktop screenshots в документации;
-- глубокое разнесение `backend/app/main.py` по сервисам.
+- Разнести helper-функции из `backend/app/main.py` по роутерам и сервисам.
+- Добавить browser-level screenshot smoke tests.
+- Расширить экспорт отчета с plain text до HTML/JSON artifacts.
 
-Это не блокирует текущий professional prototype.
+Это не блокирует текущий FastAPI web prototype.

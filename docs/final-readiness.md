@@ -5,58 +5,55 @@ Use this checklist before the final diploma defense.
 ## Start
 
 ```powershell
-.\scripts\run_desktop.ps1
+.\scripts\run_local.ps1
 ```
 
 Expected:
 
-- Desktop window opens.
-- `Engine: online`.
-- `DB: ready`.
-- `ML: ready`.
-- Backend URL is shown in the header.
+- FastAPI starts at `http://127.0.0.1:8000/`.
+- `/health` returns `ok`.
+- The dashboard opens in a browser.
+- The demo scenario can create session alerts.
 
 ## One-Click Demo
 
 1. Open `Overview`.
-2. Check `System Readiness`.
-3. Click `Prepare Defense Demo`.
-4. Wait for `Defense demo ready`.
+2. Confirm five registered devices.
+3. Click `Run Scan`.
+4. Wait for the dashboard to refresh.
 
 Expected:
 
-- 5 registered devices.
-- Multi-device samples generated.
+- 35 network samples processed.
 - ML alerts generated.
-- Report artifacts saved.
+- Devices show current risk.
+- Alerts page lists explanations.
 
 ## Screens To Show
 
+- `Overview`: KPIs, risk distribution, charts, ML readiness.
 - `Devices`: five simulated IoT devices.
-- `Alerts`: ML alerts with detail panel.
-- `ML Model`: PyTorch autoencoder status and `Test ML Model`.
-- `Reports`: KPIs, charts, device risk summary, alert timeline.
-- `Diagnostics`: recent app/backend events.
+- `Device Detail`: risk, recommendation, recent alerts.
+- `Alerts`: ML alerts with severity, source, reason, timestamp.
+- Exported text report from `Export Report`.
 
-## Evidence Pack
+## Evidence
 
-In `Reports`, click `Export Evidence Pack`.
+Keep these available:
 
-The ZIP contains:
-
-- HTML report.
-- JSON evidence.
-- PNG charts.
-- desktop diagnostics log.
-- network sample log.
-- project documentation.
+- `logs/network_samples.log`
+- exported report from `/api/export/report`
+- project documentation
+- screenshots of the web dashboard
 
 ## Recovery
 
-If the app cannot start because ports are busy:
+If the app cannot start because port `8000` is busy:
 
-1. Close old desktop windows.
-2. Stop old `uvicorn app.main:app` processes if needed.
-3. Start again.
+1. Stop the old `uvicorn app.main:app` process.
+2. Start `.\scripts\run_local.ps1` again.
+3. If needed, run manually from `backend/` with another port:
 
-The app can now search ports `8000-8100`, so normal stale-port problems should be rare.
+```powershell
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
+```

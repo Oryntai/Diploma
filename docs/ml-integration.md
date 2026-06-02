@@ -14,7 +14,7 @@ The ML layer provides anomaly detection for IoT network behavior. It is used to 
 
 ## Input Sample
 
-The desktop simulator sends a compact network sample:
+The demo workflow sends a compact network sample:
 
 ```text
 timestamp
