@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import threading
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +23,7 @@ from .models.registered_device import RegisteredDevice
 from .models.telemetry_event import TelemetryEvent
 from .services.ml_runtime import MLRuntime
 from .services.network_feature_adapter import NetworkFeatureAdapter
+from .services.rule_engine import RuleEngine
 
 
 class HealthResponse(BaseModel):
@@ -44,6 +45,9 @@ class SystemStatusResponse(BaseModel):
     database_ready: bool
     counts: CountsResponse
     ml_status: dict[str, Any]
+    runtime_components: dict[str, Any]
+    detection_layers: dict[str, Any]
+    experiment: dict[str, Any]
 
 
 class ClearDataResponse(BaseModel):
@@ -118,7 +122,46 @@ class DeviceMLTestResponse(BaseModel):
 
 ml_runtime = MLRuntime(model_path=settings.ml_model_path)
 feature_adapter = NetworkFeatureAdapter()
+rule_engine = RuleEngine()
 network_log_path = Path(__file__).resolve().parents[2] / "logs" / "network_samples.log"
+
+RUNTIME_COMPONENTS: dict[str, Any] = {
+    "operator_interface": "FastAPI web dashboard",
+    "sample_simulation": "Desktop device simulator, FastAPI demo endpoints, and CLI simulator",
+    "desktop_simulator_available": True,
+    "desktop_simulator_module": "desktop_simulator.main",
+    "persistence": "SQLite device registry and persisted alert rows",
+    "runtime_scope": "local diploma prototype",
+}
+
+DETECTION_LAYERS: dict[str, Any] = {
+    "deterministic_rule_engine": {
+        "enabled": True,
+        "purpose": "predictable device identity and metadata checks",
+        "source": "rule_engine",
+    },
+    "ciciot2023_feature_adapter": {
+        "enabled": True,
+        "feature_count": 46,
+    },
+    "ml_autoencoder": {
+        "enabled": True,
+        "source": "ml_autoencoder",
+        "decision_rule": "anomaly if reconstruction error exceeds validation threshold",
+    },
+}
+
+EXPERIMENTAL_RESULTS: dict[str, Any] = {
+    "dataset": "CICIoT2023",
+    "feature_count": 46,
+    "autoencoder_epochs": 50,
+    "baseline": "Isolation Forest",
+    "precision": 0.9988,
+    "recall": 0.9864,
+    "f1_score": 0.9925,
+    "runtime_validation": "simulated telemetry",
+    "future_hardware_validation": "Xiaomi Mi Robot Vacuum-Mop P",
+}
 
 REGISTERED_DEMO_DEVICES: list[dict[str, str]] = [
     {
@@ -274,16 +317,75 @@ def _alert_rows() -> list[dict[str, Any]]:
         rows.append(
             {
                 "id": index,
+                "alert_key": _alert_key(alert),
                 "device_id": alert.device_id,
-                "alert_type": alert.attack_type,
+                "device_href": _device_href(alert.device_id),
+                "alert_type": _alert_type_label(alert),
+                "raw_alert_type": alert.attack_type,
                 "severity": alert.severity,
                 "risk_score": _severity_score(alert.severity),
                 "source": alert.source,
-                "reason": alert.explanation or alert.message,
+                "source_label": _source_label(alert.source),
+                "reason": alert.message,
+                "details": _alert_details(alert),
                 "created_at": alert.timestamp,
             }
         )
     return rows
+
+
+def _device_href(device_id: str) -> str | None:
+    registered_ids = {device["device_id"] for device in REGISTERED_DEMO_DEVICES}
+    if device_id not in registered_ids:
+        return None
+    return f"/dashboard/devices/{device_id}"
+
+
+def _alert_key(alert: DynamicAlert) -> str:
+    return "|".join(
+        [
+            alert.timestamp.isoformat(timespec="microseconds"),
+            alert.device_id,
+            alert.attack_type,
+            alert.source,
+        ]
+    )
+
+
+def _source_label(source: str) -> str:
+    return {
+        "rule_engine": "Rule Engine",
+        "ml_autoencoder": "ML Autoencoder",
+        "ml_model": "ML Model",
+    }.get(source, source.replace("_", " ").title())
+
+
+def _alert_type_label(alert: DynamicAlert) -> str:
+    labels = {
+        "ml_flood_anomaly": "Flood anomaly",
+        "ml_packet_rate_anomaly": "Packet-rate spike",
+        "ml_connection_fanout_anomaly": "Connection fan-out",
+        "ml_bandwidth_anomaly": "Bandwidth spike",
+        "ml_latency_anomaly": "Latency spike",
+        "ml_packet_loss_anomaly": "Packet-loss spike",
+        "ml_low_value_anomaly": "Low-value anomaly",
+        "ml_network_anomaly": "ML anomaly",
+        "unknown_device": "Unknown device",
+    }
+    return labels.get(alert.attack_type, alert.attack_type.replace("_", " ").title())
+
+
+def _alert_details(alert: DynamicAlert) -> str | None:
+    parts: list[str] = []
+    if alert.reconstruction_error is not None and alert.threshold is not None:
+        parts.append(
+            f"ML score {alert.reconstruction_error:.6f} > threshold {alert.threshold:.6f}"
+        )
+    if alert.risk_level:
+        parts.append(f"Risk level: {alert.risk_level}")
+    if alert.explanation:
+        parts.append(alert.explanation)
+    return " | ".join(parts) if parts else None
 
 
 def _risk_explanations(summary: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -299,7 +401,7 @@ def _risk_explanations(summary: dict[str, Any]) -> dict[str, dict[str, Any]]:
             "current_count": summary["alerts_by_severity"].get(key, 0),
             "class_description": description,
             "score_range": score_range,
-            "why_now": "Current session ML alerts drive this class.",
+            "why_now": "Current session rule and ML alerts drive this class.",
             "typical_causes": ["traffic volume spike", "packet rate spike", "connection fan-out", "latency or packet loss anomaly"],
             "current_reasons": [alert.message for alert in session_alerts if alert.severity == key],
         }
@@ -365,12 +467,40 @@ def system_status(db: Session = Depends(get_db)) -> SystemStatusResponse:
         database_ready=True,
         counts=_counts(db),
         ml_status=ml_runtime.get_status(),
+        runtime_components=RUNTIME_COMPONENTS,
+        detection_layers=DETECTION_LAYERS,
+        experiment=EXPERIMENTAL_RESULTS,
     )
 
 
 @app.get("/api/ml/status")
 def ml_status() -> dict[str, Any]:
     return ml_runtime.get_status()
+
+
+def _evaluate_rule_sample(
+    sample: NetworkSample,
+    device_name: str,
+    registered_device: bool,
+) -> list[DynamicAlert]:
+    alerts: list[DynamicAlert] = []
+    for finding in rule_engine.evaluate(sample, registered_device=registered_device):
+        alerts.append(
+            DynamicAlert(
+                timestamp=datetime.now(UTC),
+                device_id=sample.device_id,
+                device_name=device_name,
+                severity=finding.severity,
+                attack_type=finding.attack_type,
+                source="rule_engine",
+                message=finding.message,
+                explanation=f"rule_id={finding.rule_id}; {finding.explanation}",
+                reconstruction_error=None,
+                threshold=None,
+                risk_level=finding.risk_level,
+            )
+        )
+    return alerts
 
 
 def _evaluate_network_sample(
@@ -402,7 +532,7 @@ def _evaluate_network_sample(
             device_id=sample.device_id,
             device_name=device_name,
             severity=risk_level.lower(),
-            attack_type="unknown_device_traffic",
+            attack_type=_ml_attack_type(context.attack_style, reason),
             source="ml_autoencoder",
             message=message,
             explanation=explanation,
@@ -411,6 +541,25 @@ def _evaluate_network_sample(
             risk_level=risk_level,
         )
     ]
+
+
+def _ml_attack_type(attack_style: str | None, reason: str) -> str:
+    reason_lower = reason.lower()
+    if attack_style == "DDoS":
+        if "latency anomaly" in reason_lower:
+            return "ml_latency_anomaly"
+        if "packet-loss anomaly" in reason_lower:
+            return "ml_packet_loss_anomaly"
+        return "ml_flood_anomaly"
+    if attack_style == "syn_flood":
+        return "ml_packet_rate_anomaly"
+    if attack_style == "port_scan":
+        return "ml_connection_fanout_anomaly"
+    if attack_style == "arp_spoofing" and "low-value anomaly" in reason_lower:
+        return "ml_low_value_anomaly"
+    if attack_style == "dns_tunnel" or "traffic volume" in reason_lower:
+        return "ml_bandwidth_anomaly"
+    return "ml_network_anomaly"
 
 
 def _short_alert_message(attack_style: str | None, reason: str) -> str:
@@ -434,6 +583,26 @@ def _short_alert_message(attack_style: str | None, reason: str) -> str:
     return "Unknown anomalous network pattern detected"
 
 
+def _persist_alerts(db: Session, alerts: list[DynamicAlert]) -> None:
+    if not alerts:
+        return
+
+    for alert in alerts:
+        db.add(
+            Alert(
+                device_id=alert.device_id,
+                alert_type=alert.attack_type,
+                severity=alert.severity,
+                risk_score=_severity_score(alert.severity),
+                reason=alert.explanation or alert.message,
+                source=alert.source,
+                status="open",
+                created_at=alert.timestamp,
+            )
+        )
+    db.commit()
+
+
 def _process_network_sample(
     sample: NetworkSample,
 ) -> NetworkSampleResponse:
@@ -448,10 +617,17 @@ def _process_network_sample(
         )
         device_name = device.device_name if device is not None else "Unknown device"
         device_type = device.device_type if device is not None else "temperature_sensor"
+        rule_alerts = _evaluate_rule_sample(
+            sample,
+            device_name=device_name,
+            registered_device=device is not None,
+        )
+        ml_alerts = _evaluate_network_sample(sample, device_name, device_type)
+        alerts = [*rule_alerts, *ml_alerts]
+        _persist_alerts(db, alerts)
     finally:
         db.close()
 
-    alerts = _evaluate_network_sample(sample, device_name, device_type)
     network_log_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "received_at": datetime.now(UTC).isoformat(),
@@ -557,15 +733,147 @@ def _single_metric_attack_samples_for(
     ]
 
 
+DEMO_SCENARIO_PROFILES: dict[str, list[str]] = {
+    "dev-001": [
+        "normal",
+        "packet_rate_spike",
+        "latency_spike",
+        "bandwidth_spike",
+        "packet_loss",
+        "low_value",
+        "connection_fanout",
+    ],
+    "dev-002": [
+        "normal",
+        "connection_fanout",
+        "bandwidth_spike",
+        "packet_rate_spike",
+        "flood",
+        "latency_spike",
+        "bandwidth_spike",
+    ],
+    "dev-003": [
+        "normal",
+        "bandwidth_spike",
+        "flood",
+        "packet_loss",
+        "connection_fanout",
+        "bandwidth_spike",
+        "flood",
+    ],
+    "dev-004": [
+        "normal",
+        "latency_spike",
+        "packet_loss",
+        "connection_fanout",
+        "low_value",
+        "packet_rate_spike",
+        "connection_fanout",
+    ],
+    "dev-005": [
+        "normal",
+        "bandwidth_spike",
+        "packet_rate_spike",
+        "flood",
+        "packet_loss",
+        "low_value",
+        "flood",
+    ],
+}
+
+
+def _profile_sample_for(
+    device_id: str,
+    timestamp: datetime,
+    profile: str,
+) -> NetworkSample:
+    if profile == "normal":
+        return _normal_sample_for(device_id, timestamp)
+    if profile == "flood":
+        return _attack_sample_for(device_id, timestamp)
+
+    overrides: dict[str, Any] = {
+        "bandwidth_spike": {
+            "bytes_per_second": 25000.0,
+            "packets_per_second": 0.2,
+            "connection_count": 1,
+            "latency_ms": 12.0,
+            "packet_loss_percent": 0.0,
+        },
+        "packet_rate_spike": {
+            "bytes_per_second": 512.0,
+            "packets_per_second": 120.0,
+            "connection_count": 1,
+            "latency_ms": 12.0,
+            "packet_loss_percent": 0.0,
+        },
+        "connection_fanout": {
+            "bytes_per_second": 512.0,
+            "packets_per_second": 0.2,
+            "connection_count": 80,
+            "latency_ms": 12.0,
+            "packet_loss_percent": 0.0,
+        },
+        "latency_spike": {
+            "bytes_per_second": 512.0,
+            "packets_per_second": 0.2,
+            "connection_count": 1,
+            "latency_ms": 900.0,
+            "packet_loss_percent": 0.0,
+        },
+        "packet_loss": {
+            "bytes_per_second": 512.0,
+            "packets_per_second": 0.2,
+            "connection_count": 1,
+            "latency_ms": 12.0,
+            "packet_loss_percent": 22.0,
+        },
+        "low_value": {
+            "bytes_per_second": 0.0,
+            "packets_per_second": 0.2,
+            "connection_count": 1,
+            "latency_ms": 12.0,
+            "packet_loss_percent": 0.0,
+        },
+    }.get(profile)
+    if overrides is None:
+        raise ValueError(f"Unknown demo scenario profile: {profile}")
+
+    return NetworkSample(
+        timestamp=timestamp,
+        device_id=device_id,
+        protocol="HTTP",
+        **overrides,
+    )
+
+
+def _demo_scenario_samples(devices: list[RegisteredDevice], now: datetime) -> list[NetworkSample]:
+    samples: list[NetworkSample] = []
+    for device in devices:
+        profiles = DEMO_SCENARIO_PROFILES.get(device.device_id, ["normal", "flood"])
+        for offset, profile in enumerate(profiles):
+            samples.append(_profile_sample_for(device.device_id, now + timedelta(seconds=offset), profile))
+
+    samples.append(
+        NetworkSample(
+            timestamp=now + timedelta(seconds=60),
+            device_id="rogue-device-001",
+            protocol="HTTP",
+            bytes_per_second=512.0,
+            packets_per_second=0.2,
+            connection_count=1,
+            latency_ms=12.0,
+            packet_loss_percent=0.0,
+        )
+    )
+    return samples
+
+
 @app.post("/api/demo/scenario", response_model=DemoScenarioResponse)
 def run_demo_scenario(db: Session = Depends(get_db)) -> DemoScenarioResponse:
     devices = _ensure_registered_demo_devices(db)
     now = datetime.now(UTC)
-    samples = []
-    for device in devices:
-        samples.append(_normal_sample_for(device.device_id, now))
-        samples.append(_attack_sample_for(device.device_id, now))
-        samples.extend(_single_metric_attack_samples_for(device.device_id, now))
+    samples = _demo_scenario_samples(devices, now)
     results = [_process_network_sample(sample) for sample in samples]
     alerts_created = sum(len(result.alerts) for result in results)
     return DemoScenarioResponse(
@@ -706,7 +1014,8 @@ def api_charts() -> dict[str, dict[str, int]]:
     source_counts: dict[str, int] = {}
     for alert in session_alerts:
         severity_counts[alert.severity] = severity_counts.get(alert.severity, 0) + 1
-        type_counts[alert.attack_type] = type_counts.get(alert.attack_type, 0) + 1
+        alert_type = _alert_type_label(alert)
+        type_counts[alert_type] = type_counts.get(alert_type, 0) + 1
         source_counts[alert.source] = source_counts.get(alert.source, 0) + 1
     return {
         "alerts_by_severity": severity_counts,
@@ -722,7 +1031,7 @@ def scan_run(db: Session = Depends(get_db)) -> dict[str, Any]:
         "status": result.status,
         "results": [
             f"{result.samples_sent} samples processed",
-            f"{result.alerts_created} ML alerts created",
+            f"{result.alerts_created} alerts created",
         ],
     }
 

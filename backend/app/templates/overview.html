@@ -292,7 +292,12 @@
         chartSource = new Chart(document.getElementById("chart-source"), {
             type: "doughnut",
             data: {
-                labels: Object.keys(bySrc).map(s => s === "rule_engine" ? "Rule Engine" : s === "ml_model" ? "ML Model" : s),
+                labels: Object.keys(bySrc).map(s => {
+                    if (s === "rule_engine") return "Rule Engine";
+                    if (s === "ml_autoencoder") return "ML Autoencoder";
+                    if (s === "ml_model") return "ML Model";
+                    return s;
+                }),
                 datasets: [{ data: Object.values(bySrc), backgroundColor: ["#9b8cff", "#4aa3ff", "#4fb477", "#f5c451"] }]
             },
             options: { responsive: true, animation: false, plugins: { legend: { position: "bottom", labels: { color: chartText } } } }
@@ -316,7 +321,12 @@
         }
         if (chartSource) {
             const bySrc = data.alerts_by_source || {};
-            chartSource.data.labels = Object.keys(bySrc).map(s => s === "rule_engine" ? "Rule Engine" : s === "ml_model" ? "ML Model" : s);
+            chartSource.data.labels = Object.keys(bySrc).map(s => {
+                if (s === "rule_engine") return "Rule Engine";
+                if (s === "ml_autoencoder") return "ML Autoencoder";
+                if (s === "ml_model") return "ML Model";
+                return s;
+            });
             chartSource.data.datasets[0].data = Object.values(bySrc);
             chartSource.update();
         }

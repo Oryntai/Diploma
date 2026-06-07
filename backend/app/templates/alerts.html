@@ -31,9 +31,19 @@
         <article class="card kpi"><p>Medium</p><strong>{{ alerts | selectattr('severity', 'equalto', 'medium') | list | length }}</strong></article>
     </section>
 
-    <section class="card">
+    <section class="card table-card">
         <h2>All Alerts</h2>
-        <table>
+        <table class="alerts-table">
+            <colgroup>
+                <col class="col-id">
+                <col class="col-device">
+                <col class="col-type">
+                <col class="col-severity">
+                <col class="col-risk">
+                <col class="col-source">
+                <col class="col-reason">
+                <col class="col-time">
+            </colgroup>
             <thead>
             <tr>
                 <th>ID</th>
@@ -49,11 +59,13 @@
             <tbody>
             {% if alerts %}
                 {% for alert in alerts %}
-                <tr>
+                <tr data-alert-key="{{ alert.alert_key }}">
                     <td>{{ alert.id }}</td>
                     <td>
-                        {% if alert.device_id %}
-                            <a href="/dashboard/devices/{{ alert.device_id }}" class="device-link">{{ alert.device_id }}</a>
+                        {% if alert.device_href %}
+                            <a href="{{ alert.device_href }}" class="device-link">{{ alert.device_id }}</a>
+                        {% elif alert.device_id %}
+                            {{ alert.device_id }}
                         {% else %}
                             --
                         {% endif %}
@@ -61,8 +73,16 @@
                     <td><span class="badge alert-type">{{ alert.alert_type }}</span></td>
                     <td><span class="badge risk-{{ alert.severity }}">{{ alert.severity }}</span></td>
                     <td>{{ alert.risk_score }}</td>
-                    <td><span class="badge source-{{ alert.source }}">{{ alert.source }}</span></td>
-                    <td>{{ alert.reason }}</td>
+                    <td><span class="badge source-{{ alert.source }}">{{ alert.source_label }}</span></td>
+                    <td class="reason-cell">
+                        <div class="alert-reason">{{ alert.reason }}</div>
+                        {% if alert.details %}
+                        <details class="alert-details">
+                            <summary>Details</summary>
+                            <code>{{ alert.details }}</code>
+                        </details>
+                        {% endif %}
+                    </td>
                     <td class="nowrap">{{ alert.created_at.strftime('%d-%m-%Y %H:%M') }}</td>
                 </tr>
                 {% endfor %}
@@ -99,7 +119,6 @@
         });
     }
 
-    /* ---------- Live refresh (every 3s) ---------- */
     const kpiEls = document.querySelectorAll(".kpis .kpi strong");
     const formatAlertTime = (value) => {
         const date = new Date(value);
@@ -109,6 +128,38 @@
         const pad = (number) => String(number).padStart(2, "0");
         return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
     };
+    const escapeHtml = (value) => String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    const renderDetails = (details, open) => {
+        if (!details) {
+            return "";
+        }
+        return `
+            <details class="alert-details"${open ? " open" : ""}>
+                <summary>Details</summary>
+                <code>${escapeHtml(details)}</code>
+            </details>
+        `;
+    };
+    const renderDeviceCell = (alert) => {
+        if (!alert.device_id) {
+            return "--";
+        }
+        if (!alert.device_href) {
+            return escapeHtml(alert.device_id);
+        }
+        return `<a href="${escapeHtml(alert.device_href)}" class="device-link">${escapeHtml(alert.device_id)}</a>`;
+    };
+    const alertKey = (alert) => alert.alert_key || [
+        alert.created_at,
+        alert.device_id,
+        alert.raw_alert_type,
+        alert.source
+    ].join("|");
 
     const refreshAlerts = async () => {
         try {
@@ -123,24 +174,38 @@
             }
 
             /* Table */
-            const tbody = document.querySelector("table tbody");
+            const tbody = document.querySelector(".alerts-table tbody");
             if (tbody && alerts.length > 0) {
-                tbody.innerHTML = alerts.map(a => `
-                    <tr>
-                        <td>${a.id}</td>
-                        <td>${a.device_id ? `<a href="/dashboard/devices/${a.device_id}" class="device-link">${a.device_id}</a>` : '--'}</td>
-                        <td><span class="badge alert-type">${a.alert_type}</span></td>
-                        <td><span class="badge risk-${a.severity}">${a.severity}</span></td>
-                        <td>${a.risk_score}</td>
-                        <td><span class="badge source-${a.source}">${a.source}</span></td>
-                        <td>${a.reason}</td>
+                const openDetailKeys = new Set(
+                    Array.from(tbody.querySelectorAll("tr[data-alert-key] details[open]"))
+                        .map(detail => detail.closest("tr")?.dataset.alertKey)
+                        .filter(Boolean)
+                );
+                tbody.innerHTML = alerts.map(a => {
+                    const key = alertKey(a);
+                    return `
+                    <tr data-alert-key="${escapeHtml(key)}">
+                        <td>${escapeHtml(a.id)}</td>
+                        <td>${renderDeviceCell(a)}</td>
+                        <td><span class="badge alert-type">${escapeHtml(a.alert_type)}</span></td>
+                        <td><span class="badge risk-${escapeHtml(a.severity)}">${escapeHtml(a.severity)}</span></td>
+                        <td>${escapeHtml(a.risk_score)}</td>
+                        <td><span class="badge source-${escapeHtml(a.source)}">${escapeHtml(a.source_label || a.source)}</span></td>
+                        <td class="reason-cell">
+                            <div class="alert-reason">${escapeHtml(a.reason)}</div>
+                            ${renderDetails(a.details, openDetailKeys.has(key))}
+                        </td>
                         <td class="nowrap">${formatAlertTime(a.created_at)}</td>
                     </tr>
-                `).join("");
+                `;
+                }).join("");
+            } else if (tbody) {
+                tbody.innerHTML = `<tr><td colspan="8">No alerts recorded yet.</td></tr>`;
             }
         } catch (e) { /* offline */ }
     };
 
+    refreshAlerts();
     setInterval(refreshAlerts, 3000);
 })();
 </script>

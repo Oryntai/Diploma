@@ -89,8 +89,16 @@
                     <td><span class="badge alert-type">{{ alert.alert_type }}</span></td>
                     <td><span class="badge risk-{{ alert.severity }}">{{ alert.severity }}</span></td>
                     <td>{{ alert.risk_score }}</td>
-                    <td><span class="badge source-{{ alert.source }}">{{ alert.source }}</span></td>
-                    <td>{{ alert.reason }}</td>
+                    <td><span class="badge source-{{ alert.source }}">{{ alert.source_label }}</span></td>
+                    <td class="reason-cell">
+                        <div class="alert-reason">{{ alert.reason }}</div>
+                        {% if alert.details %}
+                        <details class="alert-details">
+                            <summary>Details</summary>
+                            <code>{{ alert.details }}</code>
+                        </details>
+                        {% endif %}
+                    </td>
                     <td class="nowrap">{{ alert.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
                 </tr>
                 {% endfor %}

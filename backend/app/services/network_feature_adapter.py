@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import threading
 from dataclasses import dataclass
 from typing import Any
@@ -19,19 +21,29 @@ class NetworkFeatureAdapter:
     """Bridge simple simulator samples into the CICIoT2023 feature space."""
 
     def __init__(self, generator: TrafficFeatureGenerator | None = None) -> None:
-        self._generator = generator or TrafficFeatureGenerator(seed=42)
+        self._generator = generator
         self._lock = threading.Lock()
 
     def adapt(self, sample: Any, device_type: str) -> NetworkFeatureContext:
         attack_style, reasons = self._classify_sample(sample)
         mode = "abnormal" if attack_style is not None else "normal"
 
-        with self._lock:
-            features = self._generator.generate(
+        if self._generator is None:
+            generator = TrafficFeatureGenerator(
+                seed=self._stable_seed(sample, device_type, mode, attack_style)
+            )
+            features = generator.generate(
                 device_type=device_type,
                 mode=mode,
                 attack_type=attack_style,
             )
+        else:
+            with self._lock:
+                features = self._generator.generate(
+                    device_type=device_type,
+                    mode=mode,
+                    attack_type=attack_style,
+                )
 
         return NetworkFeatureContext(
             features=features,
@@ -39,6 +51,28 @@ class NetworkFeatureAdapter:
             attack_style=attack_style,
             reasons=reasons,
         )
+
+    @staticmethod
+    def _stable_seed(
+        sample: Any,
+        device_type: str,
+        mode: str,
+        attack_style: str | None,
+    ) -> int:
+        payload = {
+            "device_type": device_type,
+            "protocol": str(sample.protocol).upper(),
+            "mode": mode,
+            "attack_style": attack_style,
+            "bytes_per_second": float(sample.bytes_per_second),
+            "packets_per_second": float(sample.packets_per_second),
+            "connection_count": int(sample.connection_count),
+            "latency_ms": float(sample.latency_ms),
+            "packet_loss_percent": float(sample.packet_loss_percent),
+        }
+        raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        digest = hashlib.sha256(raw).hexdigest()
+        return int(digest[:8], 16)
 
     @staticmethod
     def _classify_sample(sample: Any) -> tuple[str | None, list[str]]:

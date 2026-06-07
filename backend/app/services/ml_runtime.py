@@ -258,9 +258,9 @@ class MLRuntime:
         ratio = error / threshold if threshold > 0 else 0.0
         if ratio < 1.0:
             return "Low"
-        if ratio < 2.0:
+        if ratio < 50.0:
             return "Medium"
-        if ratio < 4.0:
+        if ratio < 150.0:
             return "High"
         return "Critical"
 

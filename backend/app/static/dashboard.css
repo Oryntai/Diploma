@@ -47,6 +47,10 @@ body {
     padding: 16px;
 }
 
+.table-card {
+    overflow-x: auto;
+}
+
 .topbar {
     display: flex;
     justify-content: space-between;
@@ -200,6 +204,8 @@ th {
     color: var(--ink);
     font-size: 0.78rem;
     font-weight: 650;
+    white-space: nowrap;
+    word-break: normal;
 }
 
 .badge.online,
@@ -229,6 +235,11 @@ th {
 .badge.source-ml_model {
     color: var(--ml);
     border-color: #5b508f;
+}
+
+.badge.source-rule_engine {
+    color: var(--info);
+    border-color: #315f8e;
 }
 
 .badge.alert-type {
@@ -343,6 +354,67 @@ code {
     max-width: 520px;
     overflow-wrap: break-word;
     word-break: break-all;
+}
+
+.alerts-table {
+    min-width: 980px;
+    table-layout: fixed;
+}
+
+.alerts-table .col-id {
+    width: 48px;
+}
+
+.alerts-table .col-device {
+    width: 112px;
+}
+
+.alerts-table .col-type {
+    width: 155px;
+}
+
+.alerts-table .col-severity {
+    width: 115px;
+}
+
+.alerts-table .col-risk {
+    width: 72px;
+}
+
+.alerts-table .col-source {
+    width: 150px;
+}
+
+.alerts-table .col-time {
+    width: 150px;
+}
+
+.reason-cell {
+    min-width: 260px;
+}
+
+.alert-reason {
+    color: var(--ink);
+    line-height: 1.35;
+}
+
+.alert-details {
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 0.82rem;
+}
+
+.alert-details summary {
+    cursor: pointer;
+    width: fit-content;
+}
+
+.alert-details code {
+    display: block;
+    margin-top: 6px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.35;
 }
 
 @media (max-width: 980px) {
