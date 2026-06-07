@@ -163,14 +163,17 @@
 
     const refreshAlerts = async () => {
         try {
-            const alerts = await fetch("/api/alerts?limit=200").then(r => r.json());
+            const [alerts, summary] = await Promise.all([
+                fetch("/api/alerts?limit=200").then(r => r.json()),
+                fetch("/api/stats/summary").then(r => r.json()),
+            ]);
 
             /* KPIs */
             if (kpiEls.length >= 4) {
-                kpiEls[0].textContent = alerts.length;
-                kpiEls[1].textContent = alerts.filter(a => a.severity === "critical").length;
-                kpiEls[2].textContent = alerts.filter(a => a.severity === "high").length;
-                kpiEls[3].textContent = alerts.filter(a => a.severity === "medium").length;
+                kpiEls[0].textContent = summary.active_alerts;
+                kpiEls[1].textContent = summary.alerts_by_severity.critical || 0;
+                kpiEls[2].textContent = summary.alerts_by_severity.high || 0;
+                kpiEls[3].textContent = summary.alerts_by_severity.medium || 0;
             }
 
             /* Table */

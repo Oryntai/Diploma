@@ -386,6 +386,23 @@ def test_demo_scenario_persists_rule_and_ml_alerts(tmp_path: Path) -> None:
     }
 
 
+def test_alert_summary_is_not_limited_by_alert_list_page_size(tmp_path: Path) -> None:
+    module = load_main_module(sqlite_url(tmp_path / "alert-limit.db"))
+    client = TestClient(module.app)
+
+    for _ in range(7):
+        response = client.post("/api/demo/scenario")
+        assert response.status_code == 200
+
+    summary = client.get("/api/stats/summary")
+    assert summary.status_code == 200
+    assert summary.json()["active_alerts"] > 200
+
+    limited_alerts = client.get("/api/alerts?limit=200")
+    assert limited_alerts.status_code == 200
+    assert len(limited_alerts.json()) == 200
+
+
 def test_device_ml_tests_cover_all_registered_devices(tmp_path: Path) -> None:
     module = load_main_module(sqlite_url(tmp_path / "device-tests.db"))
     client = TestClient(module.app)
