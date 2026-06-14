@@ -41,6 +41,9 @@ reports/*
 # Local AI/tooling state
 .claude/
 .playwright-mcp/
+.codex/
 
 # MCP config (contains tokens)
 .mcp.json
+
+presentation_assets/

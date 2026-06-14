@@ -5,6 +5,7 @@ Goal: show a complete intelligent IoT security monitoring workflow in 3-5 minute
 ## Pre-Demo Checklist
 
 - Start the app with `.\scripts\run_local.ps1`.
+- Start the desktop simulator with `.\scripts\run_desktop_simulator.ps1`.
 - Open `http://127.0.0.1:8000/`.
 - Confirm five simulated devices are visible:
   `dev-001`, `dev-002`, `dev-003`, `dev-004`, `dev-005`.
@@ -18,9 +19,9 @@ Goal: show a complete intelligent IoT security monitoring workflow in 3-5 minute
 2. **Baseline screen**
    Show the black minimal overview: KPIs, device table, risk distribution, and ML readiness.
 
-3. **Run scan**
-   Click `Run Scan`.
-   Expected result: the built-in multi-device scenario sends 35 samples and creates ML alerts.
+3. **Desktop simulator sample**
+   In the desktop simulator, choose `temperature_sensor` and send `normal`, then `flood`.
+   Expected result: the normal sample has no alerts; flood creates one ML autoencoder alert.
 
 4. **Alert explanation**
    Open `Alerts`.
@@ -34,12 +35,16 @@ Goal: show a complete intelligent IoT security monitoring workflow in 3-5 minute
    Click `Export Report`.
    Show the generated text report for the current session.
 
+7. **Full scan fallback**
+   Click `Run Scan` in the dashboard to run the built-in mixed multi-device scenario.
+
 ## Key Talking Points
 
 - The main alert path uses the ML autoencoder, not only static thresholds.
 - The feature adapter maps local network samples into CICIoT-style feature vectors.
-- Dynamic samples and alerts are session-scoped, so repeated demos stay clean.
-- The dashboard is served directly by FastAPI; no desktop client is required or maintained.
+- Alerts are persisted in SQLite and mirrored in the current dashboard session.
+- Rule engine is reserved for deterministic device checks, not network thresholds.
+- The desktop simulator is a sender only; FastAPI remains the backend and dashboard.
 
 ## Recovery Plan
 

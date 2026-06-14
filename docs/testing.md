@@ -7,8 +7,8 @@
 Тесты должны доказать:
 
 1. FastAPI app работает end-to-end;
-2. dashboard открывается без desktop-клиента;
-3. сценарии угроз действительно создают ML alerts;
+2. desktop device simulator отправляет samples в FastAPI;
+3. сетевые сценарии угроз действительно создают ML alerts;
 4. поведение воспроизводимо для демо.
 
 ## Обязательные уровни тестов
@@ -38,18 +38,20 @@
 
 Проверяют сквозной путь:
 
-`FastAPI endpoint -> CICIoT adapter -> PyTorch autoencoder -> session alert -> dashboard JSON`.
+`desktop simulator payload -> FastAPI endpoint -> CICIoT adapter -> PyTorch autoencoder -> alert row -> dashboard JSON`.
 
 ## Acceptance checklist
 
 - [ ] `.\scripts\run_local.ps1` запускает FastAPI dashboard.
+- [ ] `.\scripts\run_desktop_simulator.ps1` запускает desktop device simulator.
 - [ ] `http://127.0.0.1:8000/` открывается без desktop-клиента.
+- [ ] Desktop simulator отправляет normal и flood samples в `/api/network/sample`.
 - [ ] `Run Scan` создает ожидаемые ML alerts.
 - [ ] `Devices` показывает пять зарегистрированных устройств.
 - [ ] `Alerts` показывает причины, severity, source и timestamp.
 - [ ] `Export Report` отдает текстовый отчет текущей сессии.
 - [ ] `python -m pytest backend\tests -q` проходит.
-- [ ] `python -m compileall backend simulator` проходит.
+- [ ] `python -m compileall backend desktop_simulator simulator` проходит.
 
 ## Ручной smoke перед демо
 

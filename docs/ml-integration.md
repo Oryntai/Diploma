@@ -14,7 +14,7 @@ The ML layer provides anomaly detection for IoT network behavior. It is used to 
 
 ## Input Sample
 
-The demo workflow sends a compact network sample:
+The desktop device simulator and demo workflow send a compact network sample:
 
 ```text
 timestamp
@@ -76,10 +76,12 @@ Each profile can run a normal sample and an attack-like sample through the same 
 ## Normal And Attack Expectations
 
 - Normal sample: no alert.
-- Attack-like flood sample: one critical ML alert.
-- Degraded network sample: one ML alert if model score exceeds threshold.
-- Single-metric samples: separate ML alerts for bandwidth-only, packet-rate-only, connection-count-only, latency-only, and packet-loss-only anomalies.
+- Attack-like flood sample: one ML autoencoder alert.
+- Degraded network sample: one ML autoencoder alert if the model score exceeds threshold.
+- Single-metric samples: one ML alert per abnormal network sample, labeled by the ML anomaly class.
+- Rule-engine alerts are reserved for deterministic device checks, such as an unregistered `device_id`.
 
 ## Runtime Policy
 
-ML alerts are session-only during the prototype phase. They are exported to logs and reports but not written to the database.
+Generated alerts are persisted as SQLite alert rows, mirrored in the active
+dashboard session, and exported to runtime logs and reports.

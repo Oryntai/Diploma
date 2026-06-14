@@ -101,7 +101,7 @@ Rule-based detection: 5 rules evaluated on every ingest:
 - `unknown_device` — first-seen device marked unverified → risk_score=50
 
 ### [Autoencoder]
-ML detection: PyTorch autoencoder (architecture: 46→128→64→32→16→32→64→128→46). Trained on CICIoT2023. 46 network flow features. Scaler: StandardScaler. Threshold: 0.048003. Reconstruction error > threshold = anomaly. Risk levels: Low (<1x), Medium (1-2x), High (2-4x), Critical (>4x threshold).
+ML detection: PyTorch autoencoder (architecture: 46→128→64→32→16→32→64→128→46). Trained on CICIoT2023. 46 network flow features. Scaler: StandardScaler. Threshold: 0.048003. Reconstruction error > threshold = anomaly. Risk levels are calibrated separately from the binary anomaly threshold: Low (<1x), Medium (1-50x), High (50-150x), Critical (>150x threshold).
 
 ### [Dashboard]
 Visualization: FastAPI + Jinja2 + Chart.js. 3 pages: Overview (KPIs, device table, risk distribution, charts), Devices, Alerts. Risk scoring 0-100. Export report as JSON. Dark mode support.
@@ -112,28 +112,25 @@ Visualization: FastAPI + Jinja2 + Chart.js. 3 pages: Overview (KPIs, device tabl
 
 ## SLIDE 6 — Results — what the system achieved
 
-### ML Autoencoder Performance (tested on 900 samples: 400 normal + 500 attack)
+### ML Autoencoder Performance
 
 | Metric | Value |
 |--------|-------|
-| **Precision** | **1.0000** |
-| **Recall** | **1.0000** |
-| **F1-Score** | **1.0000** |
-| **Accuracy** | **1.0000** |
-| True Positives | 500 |
-| False Positives | 0 |
-| True Negatives | 400 |
-| False Negatives | 0 |
+| **Precision** | **0.9988** |
+| **Recall** | **0.9864** |
+| **F1-Score** | **0.9925** |
+| Baseline | Isolation Forest |
+| Dataset | CICIoT2023 |
 
-### Per-Attack Detection Rate (100 samples each)
+### Per-Attack Reconstruction Signal
 
-| Attack Type | Detection Rate | Avg Reconstruction Error | Error/Threshold Ratio |
-|-------------|---------------|-------------------------|----------------------|
-| SYN Flood | **100/100 (100%)** | 2.3027 | 47.97x |
-| Port Scan | **100/100 (100%)** | 2.8865 | 60.13x |
-| ARP Spoofing | **100/100 (100%)** | 43.9254 | 915.05x |
-| DNS Tunnel | **100/100 (100%)** | 4.3720 | 91.08x |
-| DDoS | **100/100 (100%)** | 2.8896 | 60.20x |
+| Attack Type | Avg Reconstruction Error | Error/Threshold Ratio | Typical Runtime Severity |
+|-------------|-------------------------|----------------------|--------------------------|
+| SYN Flood | 2.3027 | 47.97x | Medium |
+| Port Scan | 2.8865 | 60.13x | High |
+| ARP Spoofing | 43.9254 | 915.05x | Critical |
+| DNS Tunnel | 4.3720 | 91.08x | High |
+| DDoS | 2.8896 | 60.20x | High |
 
 ### Normal Traffic Error (100 samples per device type)
 
@@ -167,7 +164,7 @@ Visualization: FastAPI + Jinja2 + Chart.js. 3 pages: Overview (KPIs, device tabl
 
 ### Interpretation:
 
-- **H1 confirmed** — autoencoder F1 = 1.0000 (>= 0.88 threshold)
+- **H1 confirmed** — autoencoder F1 = 0.9925 (>= 0.88 threshold)
 - **H2 confirmed** — hybrid system covers 10 threat types vs 5 for either layer alone (+100% coverage increase)
 - **H0 rejected** — rule engine and ML detect fundamentally different threat categories; neither alone achieves full coverage. Rule engine cannot detect SYN Flood, Port Scan, ARP Spoofing, DNS Tunnel, DDoS. ML cannot detect impossible_value, firmware_mismatch, or message_flood.
 
@@ -177,11 +174,11 @@ Visualization: FastAPI + Jinja2 + Chart.js. 3 pages: Overview (KPIs, device tabl
 
 ### [Left block]
 
-The hybrid detector caught every threat in our test scenarios. The critical finding: **rules and ML are complementary, not competing.** The rule engine excels at deterministic device-level anomalies (impossible temperature, firmware tampering), while the autoencoder catches network-level attack patterns (SYN floods, port scans) that no static rule could define. The ML model showed extreme separation between normal and anomalous traffic — average attack reconstruction error was **11.32** vs **0.014** for normal traffic, an **808x difference**. ARP Spoofing was the most strongly detected attack with error **915x** above threshold.
+The hybrid detector caught every threat in our controlled test scenarios. The critical finding: **rules and ML are complementary, not competing.** The rule engine excels at deterministic device-level anomalies (impossible temperature, firmware tampering), while the autoencoder catches network-level attack patterns (SYN floods, port scans) that no static rule could define. The ML model showed strong separation between normal and anomalous traffic, but the final benchmark is not perfect: precision is **0.9988**, recall is **0.9864**, and F1 is **0.9925**.
 
 ### [Right block]
 
-Our simulation uses controlled, reproducible attack patterns — real IoT environments would produce noisier telemetry with intermittent connectivity, sensor drift, and mixed attack vectors. The autoencoder's ability to learn normal traffic distributions gives it structural advantage in those conditions. Additionally, our perfect F1 score (1.0) is partly due to the clean separation in synthetic data — on production IoT networks, some score degradation is expected, but the 808x error ratio provides substantial margin. Testing on real hardware telemetry is the next step.
+Our simulation uses controlled, reproducible attack patterns — real IoT environments would produce noisier telemetry with intermittent connectivity, sensor drift, and mixed attack vectors. The autoencoder's ability to learn normal traffic distributions gives it structural advantage in those conditions. The high F1 score is partly due to clean separation in the dataset and simulator; on production IoT networks, some score degradation is expected. Testing on real hardware telemetry is the next step.
 
 ### [Bottom block]
 
@@ -193,7 +190,7 @@ There is limited published work combining rule-based and ML detection specifical
 
 ### REAL IoT HARDWARE
 
-Current data is simulated — attack patterns are deterministic and clean, which contributes to the perfect F1 score. The plan is to connect real IoT hardware via MQTT:
+Current data is simulated — attack patterns are deterministic and clean, which contributes to the high benchmark score. The plan is to connect real IoT hardware via MQTT or a hardware monitoring adapter:
 
 ```
 [ESP32 + DHT22 sensors] → MQTT publish → [Mosquitto Broker] → [FastAPI Backend]
@@ -202,7 +199,7 @@ real hardware            real network     localhost:1883       logs to SQLite
 
 ### Why this matters for generalization?
 
-On real device telemetry the autoencoder will face sensor noise, network jitter, packet retransmissions, and firmware update cycles. The current **808x error margin** between normal and attack traffic provides confidence that detection will remain effective even with significant noise. The rule engine thresholds may need recalibration for real hardware ranges. This is the experiment that would validate production readiness.
+On real device telemetry the autoencoder will face sensor noise, network jitter, packet retransmissions, and firmware update cycles. The model and severity calibration may need recalibration for real hardware ranges. This is the experiment that would validate production readiness.
 
 ### Additional future work:
 - **Real-time alerting** — WebSocket push notifications to dashboard
@@ -238,7 +235,7 @@ On real device telemetry the autoencoder will face sensor noise, network jitter,
 |--------------|-------|--------|
 | Unit/Integration tests (pytest) | 15 | **15/15 passed** |
 | Threat scenarios executed | 5 | **5/5 triggered correct alerts** |
-| ML attack types tested | 5 | **5/5 detected at 100% rate** |
+| ML attack categories exercised | 5 | Controlled samples triggered ML alerts; benchmark F1 = 0.9925 |
 | Normal traffic samples | 400 | **0 false positives** |
 | Attack traffic samples | 500 | **0 false negatives** |
 | Dashboard pages | 3 | **All functional** |

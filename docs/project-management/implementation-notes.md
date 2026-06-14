@@ -8,12 +8,14 @@
 - Зарегистрированы пять демо IoT-устройств.
 - `/api/network/sample`, `/api/demo/scenario` и `/api/scan/run` проходят через CICIoT feature adapter и PyTorch autoencoder.
 - Dashboard показывает overview, devices, device detail, alerts, charts и ML status.
-- Старый desktop-код удален; основной runtime теперь только FastAPI web prototype.
+- Старый monolithic desktop-код удален.
+- Добавлен легкий desktop device simulator, который отправляет presets в FastAPI `/api/network/sample`.
+- Основной runtime теперь: FastAPI backend + web dashboard + desktop simulator sender.
 
 ## Почему это важно
 
 - Проект запускается как обычное FastAPI web-приложение.
-- Демо не зависит от desktop-клиента.
+- Демо можно проводить через dashboard scan или вручную через desktop simulator.
 - Детерминированный scan упрощает защиту, тесты и скриншоты.
 
 ## Что пока можно улучшить

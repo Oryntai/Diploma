@@ -8,11 +8,18 @@ Use this checklist before the final diploma defense.
 .\scripts\run_local.ps1
 ```
 
+Then start the device simulator if the defense demo needs manual sample sending:
+
+```powershell
+.\scripts\run_desktop_simulator.ps1
+```
+
 Expected:
 
 - FastAPI starts at `http://127.0.0.1:8000/`.
 - `/health` returns `ok`.
 - The dashboard opens in a browser.
+- The desktop simulator can send a normal sample and a flood sample to `/api/network/sample`.
 - The demo scenario can create session alerts.
 
 ## One-Click Demo
@@ -25,7 +32,7 @@ Expected:
 Expected:
 
 - 35 network samples processed.
-- ML alerts generated.
+- ML alerts generated for network attack samples.
 - Devices show current risk.
 - Alerts page lists explanations.
 
@@ -34,7 +41,7 @@ Expected:
 - `Overview`: KPIs, risk distribution, charts, ML readiness.
 - `Devices`: five simulated IoT devices.
 - `Device Detail`: risk, recommendation, recent alerts.
-- `Alerts`: ML alerts with severity, source, reason, timestamp.
+- `Alerts`: ML network alerts and deterministic device alerts with severity, source, reason, timestamp.
 - Exported text report from `Export Report`.
 
 ## Evidence

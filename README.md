@@ -10,9 +10,10 @@ patterns are evaluated by a machine learning anomaly detector.
 
 ```text
 registered IoT device
+  -> desktop device simulator or demo endpoint
   -> simulated network sample
   -> FastAPI backend
-  -> deterministic traffic checks
+  -> deterministic device identity checks
   -> CICIoT2023 feature adapter
   -> PyTorch autoencoder
   -> alert and risk scoring
@@ -51,16 +52,20 @@ future work.
 - FastAPI web application with JSON API endpoints and Jinja2 dashboard pages.
 - Web dashboard for overview, devices, device details, alerts, scan demo, and
   text report export.
+- Lightweight desktop device simulator that sends preset network samples to
+  the FastAPI backend.
 - Static SQLite registry with five simulated IoT devices.
-- Deterministic sample classification for obvious traffic symptoms.
+- Deterministic rule engine for device identity and metadata checks.
 - CICIoT2023 feature adapter that maps simplified samples into 46 ML features.
 - PyTorch autoencoder anomaly detection using reconstruction error and a
   validation threshold.
-- Session-scoped alerts for the active backend process.
+- Network anomaly alerts come from the ML autoencoder; deterministic device
+  checks are reported as rule-engine alerts.
 - Runtime network sample evidence in `logs/network_samples.log`.
 
-Old desktop code has been removed. The supported operator interface is the
-FastAPI web dashboard.
+Old monolithic desktop code has been removed. The supported desktop component is
+now a small device simulator; the main operator interface is the FastAPI web
+dashboard.
 
 ## Quick Start
 
@@ -82,13 +87,33 @@ Open:
 http://127.0.0.1:8000/
 ```
 
+## Desktop Device Simulator
+
+Start the FastAPI backend first, then run:
+
+```powershell
+.\scripts\run_desktop_simulator.ps1
+```
+
+The simulator opens a small desktop window where you can choose a device type,
+send a preset, edit custom network values, send one random operational sample,
+or run a device stream. The stream mostly emits normal traffic for the selected
+device type and occasionally emits a short anomaly burst. It maps the selected
+type to the registered demo `device_id` and posts directly to:
+
+```text
+POST /api/network/sample
+```
+
 ## Demo Flow
 
 1. Open the dashboard.
-2. Click `Run Scan` to run the built-in multi-device traffic scenario.
-3. Open `Devices` to inspect registered IoT devices and current risk.
-4. Open `Alerts` to inspect ML alerts and explanations.
-5. Click `Export Report` to download a text report for the current session.
+2. Start the desktop simulator and send a `normal` sample for a device type.
+3. Send a `flood` or single-metric attack preset from the desktop simulator.
+4. Open `Devices` to inspect registered IoT devices and current risk.
+5. Open `Alerts` to inspect ML network alerts and deterministic device alerts.
+6. Click `Run Scan` for the built-in mixed multi-device traffic scenario.
+7. Click `Export Report` to download a text report for the current session.
 
 ## Backend API
 
@@ -107,16 +132,16 @@ http://127.0.0.1:8000/
 | GET | `/api/stats/charts` | Dashboard chart data |
 | GET | `/api/ml/status` | ML model readiness and metadata |
 | GET | `/api/export/report` | Export current session text report |
-| POST | `/api/network/sample` | Accept one network sample and return dynamic ML alerts |
-| POST | `/api/demo/scenario` | Run the built-in multi-device demo traffic sequence |
+| POST | `/api/network/sample` | Accept one network sample and return ML/device-check alerts |
+| POST | `/api/demo/scenario` | Run the built-in mixed multi-device demo scenario |
 | POST | `/api/demo/device-tests` | Run normal and attack ML tests for every registered device |
 | POST | `/api/scan/run` | Run the dashboard scan demo |
 | POST | `/api/data/clear` | Clear runtime DB rows and session alerts |
 
 ## Runtime Data Policy
 
-- SQLite stores static registered device metadata.
-- Dynamic alerts are kept in memory during the backend process.
+- SQLite stores static registered device metadata and generated alert rows.
+- The active backend process also keeps alerts in memory for live dashboard refresh.
 - `logs/` contains runtime diagnostics and network sample evidence.
 - `reports/` is reserved for generated artifacts.
 - Logs and reports are ignored by git; `.gitkeep` preserves the empty folders.
@@ -125,7 +150,7 @@ http://127.0.0.1:8000/
 
 ```powershell
 python -m pytest backend\tests -q
-python -m compileall backend simulator
+python -m compileall backend desktop_simulator simulator
 ```
 
 ## Important Paths
@@ -137,7 +162,9 @@ backend/app/static/dashboard.css Web dashboard stylesheet
 backend/app/services/            ML runtime and feature adapter
 backend/models/                  Trained autoencoder and companion artifacts
 backend/tests/                   API and smoke tests
+desktop_simulator/               Desktop device simulator for FastAPI samples
 simulator/                       Simulated device traffic and scenarios
 scripts/run_local.ps1            FastAPI launch script
+scripts/run_desktop_simulator.ps1 Desktop simulator launch script
 docs/                            Architecture, testing, demo, and project notes
 ```

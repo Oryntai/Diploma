@@ -1,23 +1,25 @@
 # Руководство по локальному запуску
 
-Документ описывает, как подготовить окружение и с чего начать реализацию по `Todo.md`.
+Документ описывает актуальный запуск проекта после перехода к FastAPI web
+dashboard и отдельному desktop device simulator.
 
 ## Цель
 
 Используйте этот документ, когда:
 
 - студент впервые поднимает проект;
-- coding-agent начинает реализацию с нуля;
-- команде нужен единый checklist запуска на «чистой» машине.
+- нужно быстро проверить backend, dashboard и simulator;
+- команде нужен единый checklist запуска на чистой машине.
 
-## Базовые решения для MVP
+## Базовые решения MVP
 
 - Python: `3.11+`
 - Backend: `FastAPI`
-- Broker: `Eclipse Mosquitto`
+- UI: `Jinja2` dashboard
+- Desktop simulator: `tkinter`
 - База: `SQLite`
-- UI: `Jinja2`
-- Графики: `Chart.js`
+- ML: `PyTorch` autoencoder
+- Feature space: `CICIoT2023`, 46 network features
 - Тесты: `pytest`, `httpx`
 
 ## Предусловия
@@ -27,104 +29,101 @@
 - Python 3.11+
 - pip
 - Git
-- Mosquitto (локально или через Docker)
 - современный браузер
 
 Опционально:
 
-- Docker Desktop
 - DB Browser for SQLite
 - VS Code
+- Docker Desktop, если отдельно нужен Mosquitto для экспериментов
 
 ## Минимальная структура
 
 ```text
-backend/
-  app/
-  tests/
-simulator/
-  devices/
-  scenarios/
-docs/
-scripts/
-docker/
+backend/             FastAPI app, templates, services, models, tests
+desktop_simulator/   desktop sender for FastAPI network samples
+simulator/           CLI/device scenario helpers
+docs/                documentation
+scripts/             launch scripts
+docker/              optional Mosquitto config
 ```
 
-## Минимальные зависимости backend
+## Установка зависимостей
 
-Runtime:
-
-- `fastapi`
-- `uvicorn`
-- `sqlalchemy`
-- `pydantic`
-- `paho-mqtt`
-- `jinja2`
-
-Тесты:
-
-- `pytest`
-- `httpx`
-
-После стабилизации rules-only пути можно добавить:
-
-- `scikit-learn`
-- `pandas`
-
-## Рекомендуемые переменные окружения
-
-```env
-APP_ENV=local
-APP_HOST=127.0.0.1
-APP_PORT=8000
-DATABASE_URL=sqlite:///./iot_monitor.db
-MQTT_HOST=127.0.0.1
-MQTT_PORT=1883
-MQTT_TOPIC_ROOT=iot/devices
-DEFAULT_TIMEZONE=UTC
-ENABLE_ANOMALY_DETECTION=false
-SIMULATOR_SEED=42
+```powershell
+python -m pip install -r backend\requirements.txt
 ```
 
-Правила:
+`tkinter` используется для desktop simulator и обычно поставляется вместе с
+Python на Windows.
 
-- timestamps хранить в UTC;
-- anomaly detection выключен по умолчанию;
-- без скрытых «магических» значений в коде.
+## Запуск backend и dashboard
 
-## Путь запуска (native)
+```powershell
+.\scripts\run_local.ps1
+```
 
-1. Установить Python 3.11+.
-2. Создать venv и активировать.
-3. Установить backend зависимости.
-4. Поднять Mosquitto.
-5. Убедиться, что broker доступен на `127.0.0.1:1883`.
-6. Запустить FastAPI.
-7. Запустить simulator.
+Или вручную:
 
-## Путь запуска (минимум Docker)
+```powershell
+cd backend
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
 
-Используйте Docker только если он **упрощает** запуск.
+Открыть dashboard:
 
-Рекомендованный компромисс:
+```text
+http://127.0.0.1:8000/
+```
 
-- Mosquitto в Docker (опционально);
-- FastAPI и simulator — локально в первый цикл.
+## Запуск desktop device simulator
+
+Backend должен быть уже запущен.
+
+```powershell
+.\scripts\run_desktop_simulator.ps1
+```
+
+В окне simulator:
+
+1. Проверить `FastAPI URL`: `http://127.0.0.1:8000`.
+2. Нажать `Health`.
+3. Выбрать тип устройства, например `temperature_sensor`.
+4. Отправить `normal` preset через `Send Preset`.
+5. Изменить поля в `Custom Sample` и нажать `Send Custom`.
+6. Нажать `Send Random Sample` или запустить `Start Device Stream`.
+7. Проверить alerts в dashboard.
+
+`Start Device Stream` имитирует выбранный device type: сначала идут штатные
+samples, затем редкий короткий incident burst, после чего поток возвращается к
+штатной работе.
+
+Simulator отправляет JSON напрямую в:
+
+```text
+POST /api/network/sample
+```
+
+## Проверка
+
+```powershell
+python -m pytest backend\tests -q
+python -m compileall backend desktop_simulator simulator
+```
+
+## Runtime data
+
+- SQLite хранит registered devices и generated alert rows.
+- Активный backend процесс держит alerts в памяти для live dashboard refresh.
+- `logs/network_samples.log` содержит evidence по принятым samples.
+- `reports/` зарезервирован под экспортированные artifacts.
 
 ## Первый успешный bring-up
 
-1. Запустить Mosquitto.
-2. Запустить backend.
-3. Проверить `GET /health`.
-4. Запустить один temperature simulator.
-5. Отправить telemetry в MQTT topic.
-6. Проверить, что backend принял и сохранил событие.
-
-## Критерий готовности setup-этапа
-
-Этап считается завершенным, когда:
-
-- новый участник может поднять проект по инструкции;
-- backend и simulator стартуют без ad-hoc фиксов;
-- broker/API/DB endpoints задокументированы явно;
-- последовательность воспроизводится минимум на двух ноутбуках.
+1. Запустить `.\scripts\run_local.ps1`.
+2. Проверить `GET /health`.
+3. Открыть dashboard.
+4. Запустить `.\scripts\run_desktop_simulator.ps1`.
+5. Отправить normal sample: alerts должны быть пустыми.
+6. Отправить flood sample: должен появиться `ml_autoencoder` alert.
+7. Открыть `Alerts` и `Devices`.

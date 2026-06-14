@@ -5,10 +5,11 @@
 ```text
 FastAPI web app
   -> SQLite static device registry
+  -> desktop device simulator
   -> network sample endpoint
   -> CICIoT feature adapter
   -> PyTorch autoencoder runtime
-  -> in-memory session alerts
+  -> persisted alert rows and live dashboard state
   -> black minimal web dashboard
 ```
 
@@ -23,8 +24,9 @@ FastAPI is the primary application surface. It serves both JSON API routes and J
 - `/api/scan/run` - deterministic demo scan for the UI.
 - `/api/export/report` - current session text report.
 
-Old desktop code has been removed. The web dashboard is the only supported
-operator interface for the current prototype.
+Old monolithic desktop code has been removed. The current desktop component is
+a small device simulator that sends preset network samples to FastAPI. The web
+dashboard remains the main operator interface.
 
 ## Backend API
 
@@ -38,7 +40,8 @@ The API remains local and small:
 - per-device ML normal/attack tests;
 - dashboard summary, chart, device, and alert data.
 
-Dynamic samples and alerts are intentionally kept in memory for the current backend process. SQLite stores the static registered device registry.
+Generated alerts are persisted in SQLite and mirrored in memory for the current
+dashboard session. SQLite also stores the static registered device registry.
 
 ## Data Model
 
